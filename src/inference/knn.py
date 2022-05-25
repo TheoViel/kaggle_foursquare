@@ -1,3 +1,4 @@
+import pandas as pd
 from tqdm.notebook import tqdm
 from cuml.neighbors import NearestNeighbors
 from sklearn.neighbors import KNeighborsRegressor
@@ -11,7 +12,7 @@ def find_matches(preds, df, n_neighbors=100):
     dists, indices = matcher.kneighbors(preds)
 
     matches = {
-        df.index[i]: [df.index[match] for match in indices[i]]
+        df.index[i]: [df.index[match] for match in indices[i] if match != i]
         for i in range(len(indices))
     }
 
@@ -39,7 +40,7 @@ def get_nearest_neighbors_country(
             ]
 
         matches_country = {
-            df_c.index[i]: [df_c.index[match] for match in indices[i]]
+            df_c.index[i]: [df_c.index[match] for match in indices[i] if match != i]
             for i in range(len(indices))
         }
         matches.update(matches_country)
@@ -60,8 +61,22 @@ def get_nearest_neighbors(df, n_neighbors=10, cols=["latitude", "longitude"], ma
         ]
 
     matches = {
-        df.index[i]: [df.index[match] for match in indices[i]]
+        df.index[i]: [df.index[match] for match in indices[i] if match != i]
         for i in tqdm(range(len(indices)))
     }
 
     return matches
+
+
+def create_pairs(matches, gt_matches=None):
+    pairs = []
+    for p1 in matches:
+        for p2 in matches[p1]:
+            if gt_matches is not None:
+                pairs.append([p1, p2, p2 in gt_matches[p1]])
+            else:
+                pairs.append([p1, p2, False])
+
+    df_pairs = pd.DataFrame(pairs)
+    df_pairs.columns = ["id_1", "id_2", "match"]
+    return df_pairs

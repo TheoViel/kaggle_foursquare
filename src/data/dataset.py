@@ -33,7 +33,7 @@ class TripletDataset(Dataset):
         tokens += [self.tokenizer.special_tokens["sep"]]
 
         tokens += self.tokenizer(
-            row["address"],
+            row["full_address"],
             add_special_tokens=False,
             max_length=max_len // 3,
             truncation=True,
@@ -61,16 +61,6 @@ class TripletDataset(Dataset):
         else:
             pos_id = self.triplets["pos_ids"][idx][0]
             neg_id = self.triplets["fp_ids"][idx][0]
-
-        # # Sample Negative id
-        # neg_id = pos_id
-        # i = 10000  # offset
-        # while neg_id in self.triplets["pos_ids"][idx]:
-        #     if self.train:
-        #         neg_id = np.random.choice(self.df.index)
-        #     else:
-        #         neg_id = self.df.index[idx + i]
-        #         i += 1
 
         ref_tokens = self.encode(self.df.loc[ref_id])
         pos_tokens = self.encode(self.df.loc[pos_id])

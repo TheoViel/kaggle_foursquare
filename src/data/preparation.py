@@ -45,7 +45,7 @@ def prepare_train_data(root=""):
     cols = ['name', 'address', 'city', 'state', 'zip', 'country', 'phone', 'url', 'categories']
     df[cols] = df[cols].fillna('').astype(str)
 
-    df['address'] = df.apply(get_full_address, 1)
+    df['full_address'] = df.apply(get_full_address, 1)
     # df.drop(['city', 'state', 'zip'], axis=1, inplace=True)
 
     df['url'] = df['url'].apply(parse_url)
