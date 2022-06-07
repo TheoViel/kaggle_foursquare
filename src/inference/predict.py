@@ -1,6 +1,6 @@
 import torch
 import numpy as np
-from tqdm.notebook import tqdm
+from tqdm.notebook import tqdm  # noqa
 from torch.utils.data import DataLoader
 
 from params import NUM_WORKERS

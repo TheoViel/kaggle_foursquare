@@ -1,7 +1,10 @@
 import os
+import re
 import sys
 import json
+import shutil
 import datetime
+import subprocess
 import numpy as np
 
 
@@ -89,3 +92,42 @@ def save_config(config, path):
 
     with open(path + ".json", "w") as f:
         json.dump(dic, f)
+
+
+def upload_to_kaggle(folders, directory, dataset_name):
+    """
+    Uploads directories to a Kaggle dataset.
+
+    Args:
+        folders (list of strs): Folders to upload.
+        directory (str): Path to save the dataset to.
+        dataset_name (str): Name of the dataset.
+    """
+    os.mkdir(directory)
+
+    for folder in folders:
+        print(f"- Copying {folder}...")
+        name = "_".join(folder[:-1].split('/')[-2:])
+        shutil.copytree(folder, directory + name)
+
+    # Create dataset-metadata.json
+    with open(directory + 'dataset-metadata.json', "w") as f:
+        slug = re.sub(' ', '-', dataset_name.lower())
+        dic = {
+            "title": f"{dataset_name}",
+            "id": f"theoviel/{slug}",
+            "licenses": [{"name": "CC0-1.0"}]
+        }
+        json.dump(dic, f)
+
+    # Upload dataset
+    print('- Uploading ...')
+    command = f"kaggle d create -p {directory} --dir-mode zip"
+
+    try:
+        process = subprocess.Popen(command.split(), stdout=subprocess.PIPE)
+        output, error = process.communicate()
+        print('Output :', output)
+        print('Error :', error)
+    except Exception:
+        print('Upload failed, Run command manually :', command)

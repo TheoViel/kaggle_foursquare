@@ -17,9 +17,13 @@ __pycache__
 *.pt
 *.pth
 *.csv
+*.tsv
+*.txt
 
 # Custom
 logs/
 output/
 models/
 weights_*/
+catboost_info/
+data/

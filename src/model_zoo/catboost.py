@@ -1,12 +1,14 @@
+import sys
 import lofo
 import pandas as pd
-from xgboost import XGBClassifier, callback
+from catboost import CatBoostClassifier
 from sklearn.metrics import roc_auc_score
 
 
-def objective_xgb(trial, df_train, df_val, features, target="match"):
-    xgb_params = dict(
+def objective_catboost(trial, df_train, df_val, features, target="match"):
+    catboost_params = dict(
         max_depth=trial.suggest_int("max_depth", 5, 15),
+        # max_leaves=trial.suggest_int("max_leaves", 100, 10000),
         gamma=trial.suggest_float("gamma", 1e-6, 1e-1, log=True),
         min_child_weight=trial.suggest_int("min_child_weight", 1, 10),
         colsample_bytree=trial.suggest_float("colsample_bytree", 0.5, 1),
@@ -15,15 +17,15 @@ def objective_xgb(trial, df_train, df_val, features, target="match"):
         reg_lambda=trial.suggest_float("reg_lambda", 1e-3, 1, log=True),
     )
 
-    model = XGBClassifier(
-        **xgb_params,
-        n_estimators=1000,
+    model = CatBoostClassifier(
+        **catboost_params,
+        n_estimators=2000,
         learning_rate=0.1,
         objective="binary:logistic",
         eval_metric="auc",
-        tree_method="gpu_hist",
-        predictor="gpu_predictor",
-        use_label_encoder=False,
+        gpu_ram_part=0.95,
+        gpu_cat_features_storage="GpuRam",
+        task_type="GPU",
     )
 
     model.fit(
@@ -45,7 +47,7 @@ def objective_xgb(trial, df_train, df_val, features, target="match"):
     return roc_auc_score(y_val, pred)
 
 
-def train_xgb(
+def train_catboost(
     df_train,
     df_val,
     df_test,
@@ -56,25 +58,17 @@ def train_xgb(
     i=0,
 ):
 
-    model = XGBClassifier(
+    model = CatBoostClassifier(
         **params,
         n_estimators=5000,
-        objective="binary:logistic",
-        learning_rate=0.05,
-        eval_metric="auc",
-        tree_method="gpu_hist",
-        predictor="gpu_predictor",
-        use_label_encoder=False,
+        learning_rate=0.1,
+        classes_count=0,
+        # boosting_type='Plain',
+        loss_function="Logloss",
+        eval_metric="AUC",
+        task_type="GPU",
         random_state=42 + i,
-    )
-
-    es = callback.EarlyStopping(
-        rounds=100,
-        min_delta=1e-5,
-        save_best=True,
-        maximize=True,
-        data_name="validation_0",
-        metric_name="auc",
+        allow_writing_files=False,
     )
 
     model.fit(
@@ -82,8 +76,9 @@ def train_xgb(
         df_train[target],
         eval_set=[(df_val[features], df_val[target])],
         verbose=100,
-        # early_stopping_rounds=100,  # None
-        callbacks=[es],
+        cat_features=cat_features,
+        early_stopping_rounds=100,  # None, 500
+        log_cout=sys.stdout,
     )
 
     pred = model.predict_proba(df_val[features])[:, 1]
@@ -91,7 +86,7 @@ def train_xgb(
     return pred, model
 
 
-def lofo_xgb(df, config, folds=[0], auto_group_threshold=1):
+def lofo_catboost(df, config, folds=[0], auto_group_threshold=1):
     dataset = lofo.Dataset(
         df,
         target=config.target,
@@ -106,15 +101,15 @@ def lofo_xgb(df, config, folds=[0], auto_group_threshold=1):
             df_val_opt = df[(df["fold_1"] == fold) | (df["fold_2"] == fold)]
             cv.append((list(df_train_opt.index), list(df_val_opt.index)))
 
-    model = XGBClassifier(
+    model = CatBoostClassifier(
         **config.params,
         n_estimators=1000,
-        learning_rate=0.1,
         objective="binary:logistic",
+        learning_rate=0.1,
         eval_metric="auc",
-        tree_method="gpu_hist",
-        predictor="gpu_predictor",
-        use_label_encoder=False,
+        gpu_ram_part=0.95,
+        gpu_cat_features_storage="GpuRam",
+        task_type="GPU",
     )
 
     lofo_imp = lofo.LOFOImportance(dataset, scoring="roc_auc", cv=cv, model=model)

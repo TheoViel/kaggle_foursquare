@@ -19,7 +19,6 @@ def plot_importances(imps):
     sns.barplot(x='importance', y="index", data=importances)
     plt.yticks(fontsize=11)
     plt.ylabel(None)
-    plt.show()
 
 
 def plot_confusion_matrix(
