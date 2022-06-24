@@ -5,10 +5,13 @@ import pandas as pd
 from numba import jit
 from sys import getsizeof
 from scipy import spatial
-from numerize.numerize import numerize
 from math import radians, cos, sin, asin, sqrt
 from sklearn.feature_extraction.text import TfidfVectorizer
 
+try:
+    from numerize.numerize import numerize
+except ModuleNotFoundError:
+    pass
 
 ##########################
 #          LOAD          #
@@ -233,7 +236,10 @@ def print_infos(p1, p2=None, N_TO_FIND=360000):
     )
     found = clusts["id"].apply(lambda x: len(x)).sum()
 
-    print(f"\nNumber of candidates : {numerize(len(p1))}")
+    try:
+        print(f"\nNumber of candidates : {numerize(len(p1))}")
+    except NameError:
+        print(f"\nNumber of candidates : {len(p1)}")
     print(f"Proportion of positive candidates: {p1.y.mean() * 100:.2f}%")
     print(f"Proportion of found matches: {found / N_TO_FIND * 100:.2f}%\n")
 
