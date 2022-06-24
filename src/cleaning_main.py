@@ -1,9 +1,9 @@
 import gc
-import time
 import random
+import warnings
 import numpy as np
 import pandas as pd
-from tqdm.notebook import tqdm
+from tqdm.auto import tqdm
 from unidecode import unidecode
 
 from params import DATA_PATH, OUT_PATH, RESSOURCES_PATH, IS_TEST
@@ -11,6 +11,7 @@ from ressources import *
 from cleaning import *
 
 random.seed(13)
+warnings.simplefilter("ignore")
 
 
 # In[ ]:
@@ -325,7 +326,6 @@ train["city"] = train["city"].str[:38]
 for w in ["gorod"]:
     train["city"] = train["city"].apply(lambda x: x.replace(w, ""))
 train["city"].loc[train["city"] == "nan"] = ""
-print("finished cleaning cities", int(time.time() - start_time), "sec")
 
 
 # ### Clean address
@@ -506,5 +506,9 @@ for c in [
 
 # In[ ]:
 
+if IS_TEST:
+    train.to_csv(OUT_PATH + "cleaned_data_test.csv", index=False)
+else:
+    train.to_csv(OUT_PATH + "cleaned_data_train.csv", index=False)
 
-train.to_csv(OUT_PATH + "cleaned_data.csv", index=False)
+print('Done !')

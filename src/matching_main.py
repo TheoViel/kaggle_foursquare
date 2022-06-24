@@ -4,14 +4,12 @@
 
 
 import gc
-import time
 import random
+import warnings
 import numpy as np
 import pandas as pd
-import seaborn as sns
-import matplotlib.pyplot as plt
 
-from tqdm.notebook import tqdm
+from tqdm.auto import tqdm
 
 from params import DEBUG, OUT_PATH, IS_TEST
 from ressources import *
@@ -19,6 +17,7 @@ from matching import *
 
 
 random.seed(13)
+warnings.simplefilter("ignore")
 
 # ## Load Data
 
@@ -26,7 +25,10 @@ random.seed(13)
 # In[ ]:
 
 
-train = load_cleaned_data(OUT_PATH + "cleaned_data.csv")
+if IS_TEST:
+    train = load_cleaned_data(OUT_PATH + "cleaned_data_test.csv")
+else:
+    train = load_cleaned_data(OUT_PATH + "cleaned_data_train.csv")
 
 
 # In[ ]:
@@ -59,12 +61,7 @@ if DEBUG:
 
 
 if not IS_TEST:
-    clusts = (
-        train[["id", "point_of_interest"]]
-        .groupby("point_of_interest")
-        .agg(list)
-        .reset_index()
-    )
+    clusts = train[["id", "point_of_interest"]].groupby("point_of_interest").agg(list).reset_index()
     clusts = clusts[clusts["id"].apply(lambda x: len(x) > 1)]
 
     N_TO_FIND = clusts["id"].apply(lambda x: len(x)).sum()
@@ -129,26 +126,18 @@ print_infos(p1, p2, N_TO_FIND)
 # do this in 4 blocks, shifted by 1/2 size, to avoid cut-offs
 for s1 in [0, 5e-5]:
     for s2 in [0, 5e-5]:
-        p3 = train[
-            ["country", "id", "point_of_interest", "latitude", "longitude"]
-        ].copy()
+        p3 = train[["country", "id", "point_of_interest", "latitude", "longitude"]].copy()
         p3["latitude"] = np.round(s1 + 0.5 * p3["latitude"], 4)  # rounded to 4 digits
         p3["longitude"] = np.round(
             s2 + 0.5 * p3["longitude"] / np.cos(p3["latitude"] * 3.14 / 180.0), 4
         )  # rounded to 4 digits
-        p3 = p3.sort_values(by=["country", "latitude", "longitude", "id"]).reset_index(
-            drop=True
-        )
+        p3 = p3.sort_values(by=["country", "latitude", "longitude", "id"]).reset_index(drop=True)
         idx1 = []
         idx2 = []
         lat, lon = p3["latitude"].to_numpy(), p3["longitude"].to_numpy()
         for i in range(p3.shape[0] - 1):
             for j in range(1, 5):  # 5 = add 4 sets
-                if (
-                    i + j < p3.shape[0]
-                    and lat[i] == lat[i + j]
-                    and lon[i] == lon[i + j]
-                ):
+                if i + j < p3.shape[0] and lat[i] == lat[i + j] and lon[i] == lon[i + j]:
                     idx1.append(i)
                     idx2.append(i + j)
         p1a = p3[["id", "point_of_interest"]].loc[idx1].reset_index(drop=True)
@@ -381,14 +370,12 @@ p3 = train[
 ].copy()
 
 # rounded coordinates
-p3["latitude"] = np.round(p3["latitude"], 1).astype(
-    "float32"
-)  # rounding: 1=10Km, 2=1Km
+p3["latitude"] = np.round(p3["latitude"], 1).astype("float32")  # rounding: 1=10Km, 2=1Km
 p3["longitude"] = np.round(p3["longitude"], 1).astype("float32")
 
-p3 = p3.sort_values(
-    by=["country", "latitude", "longitude", "categories", "id"]
-).reset_index(drop=True)
+p3 = p3.sort_values(by=["country", "latitude", "longitude", "categories", "id"]).reset_index(
+    drop=True
+)
 
 idx1 = []
 idx2 = []
@@ -407,9 +394,7 @@ for i in tqdm(range(p3.shape[0] - 1)):
     for j in range(
         1, min(300, p3.shape[0] - 1 - i)
     ):  # put a limit here - look at no more than X items
-        if (
-            li != lon2[i + j]
-        ):  # if lon matches, lat and country also match - b/c of sorting order
+        if li != lon2[i + j]:  # if lon matches, lat and country also match - b/c of sorting order
             break
         if lcs2(names[i], names[i + j]) >= 5:  # lcs2 >= 5
             idx1.append(i)
@@ -516,9 +501,7 @@ sort = [
 ]
 
 train = train.sort_values(by=sort).reset_index(drop=True)
-train.drop(
-    ["lat2", "lon2", "name2"], axis=1, inplace=True
-)  # these are no longer needed
+train.drop(["lat2", "lon2", "name2"], axis=1, inplace=True)  # these are no longer needed
 
 
 # ## Construct pairs
@@ -614,11 +597,7 @@ for i, s in enumerate(tqdm(range(2, 121))):  # 121
             ii[j] = 1
     # keep if dist < maxdist, or names partially match
     # idx = (dist < maxdist) | (ii > 0)
-    idx = (
-        (dist < maxdist)
-        | (ii > 0)
-        | np.logical_and(same_cat_simpl, dist < train["q90"] * 900)
-    )
+    idx = (dist < maxdist) | (ii > 0) | np.logical_and(same_cat_simpl, dist < train["q90"] * 900)
 
     p1 = p1.append(train[colsa].loc[idx], ignore_index=True)
     p2 = p2.append(p2a[colsa].loc[idx], ignore_index=True)
@@ -629,9 +608,7 @@ for i, s in enumerate(tqdm(range(2, 121))):  # 121
         print_infos(p1, p2, N_TO_FIND)
         print()
 
-        p1["y"] = np.array(p1["point_of_interest"] == p2["point_of_interest"]).astype(
-            np.int8
-        )
+        p1["y"] = np.array(p1["point_of_interest"] == p2["point_of_interest"]).astype(np.int8)
         a = p1.groupby("id")["y"].sum().reset_index()
         print(
             i,
@@ -641,8 +618,6 @@ for i, s in enumerate(tqdm(range(2, 121))):  # 121
             p1.shape[0],
             p1["y"].sum(),
             np.minimum(1, a["y"]).sum(),
-            int(time.time() - start_time),
-            "sec",
         )
 
     gc.collect()
@@ -697,15 +672,13 @@ get_CV(
 )
 
 
-# ### Add close candidates 
+# ### Add close candidates
 # - Slow
 
 # In[ ]:
 
 
-already_found = {
-    tuple(sorted([idx1, idx2])): 1 for idx1, idx2 in zip(p1["id"], p2["id"])
-}
+already_found = {tuple(sorted([idx1, idx2])): 1 for idx1, idx2 in zip(p1["id"], p2["id"])}
 
 New_candidates = []
 
@@ -902,9 +875,7 @@ for col_name in ["name_initial_decode"]:
     Names = Names.apply(lambda x: x.strip())
     Names = Names[Names.str.len() >= 2]
 
-    Names_numrow = {
-        i: idx for i, idx in enumerate(Names.index)
-    }  # Keep initial row number
+    Names_numrow = {i: idx for i, idx in enumerate(Names.index)}  # Keep initial row number
     Names = Names.to_list()
 
     print(f"Len names : {len(Names)}.")
@@ -954,10 +925,7 @@ for col_name in ["name_initial_decode"]:
                     if (
                         key not in Cand
                         and (cat_simpl1 == 1 or cat_simpl2 == 1)
-                        and (
-                            haversine(lat1, lon1, lat2, lon2) <= 100
-                            or "kualalumpur" in name1
-                        )
+                        and (haversine(lat1, lon1, lat2, lon2) <= 100 or "kualalumpur" in name1)
                     ):
                         poi1, poi2 = (
                             train["point_of_interest"].iat[idx1],
@@ -968,16 +936,8 @@ for col_name in ["name_initial_decode"]:
                         Added_p2.append([id2, poi2])
                         nb_true_matchs_initial += int(poi1 == poi2)
 
-        p1 = (
-            p1.append(pd.DataFrame(Added_p1, columns=p1.columns))
-            .reset_index(drop=True)
-            .copy()
-        )
-        p2 = (
-            p2.append(pd.DataFrame(Added_p2, columns=p2.columns))
-            .reset_index(drop=True)
-            .copy()
-        )
+        p1 = p1.append(pd.DataFrame(Added_p1, columns=p1.columns)).reset_index(drop=True).copy()
+        p2 = p2.append(pd.DataFrame(Added_p2, columns=p2.columns)).reset_index(drop=True).copy()
         print(f"Candidates added for tfidf n°1 (airports) : {len(p1)-size1}/{len(p1)}.")
 
 
@@ -996,18 +956,20 @@ far_cat_simpl = [4]
 thr_tfidf = 0.45
 thr_distance = 100
 
-for col_name in ['name_initial', 'name_initial_decode']:
+for col_name in ["name_initial", "name_initial_decode"]:
 
-    Names = train[train['category_simpl'].isin(far_cat_simpl)][col_name].copy() # add unknown categories
+    Names = train[train["category_simpl"].isin(far_cat_simpl)][
+        col_name
+    ].copy()  # add unknown categories
 
     # Drop stop words
-    for stopword in ['stasiun', 'station', 'metro', '北改札', 'bei gai zha', 'stasiun'] :
-        Names = Names.apply(lambda x : x.replace(stopword+'s', ''))
-        Names = Names.apply(lambda x : x.replace(stopword, ''))
-    Names = Names.apply(lambda x : x.strip())
+    for stopword in ["stasiun", "station", "metro", "北改札", "bei gai zha", "stasiun"]:
+        Names = Names.apply(lambda x: x.replace(stopword + "s", ""))
+        Names = Names.apply(lambda x: x.replace(stopword, ""))
+    Names = Names.apply(lambda x: x.strip())
     Names = Names[Names.str.len() > 2]
 
-    Names_numrow = {i:idx for i, idx in enumerate(Names.index)} # Keep initial row number
+    Names_numrow = {i: idx for i, idx in enumerate(Names.index)}  # Keep initial row number
     Names = Names.to_list()
 
     print(f"Len names : {len(Names)}.")
@@ -1017,30 +979,51 @@ for col_name in ['name_initial', 'name_initial_decode']:
         Tfidf_idx, Tfidf_val = vectorisation_similarite(Names, thr=thr_tfidf)
 
         # no self-matchs and retrieve the initial row number
-        Tfidf_no_selfmatch = [[Names_numrow[i], [Names_numrow[x] for x in L if x != i]] for i, L in enumerate(Tfidf_idx)]
-        Tfidf_no_selfmatch = [x for x in Tfidf_no_selfmatch if len(x[-1])>0]
+        Tfidf_no_selfmatch = [
+            [Names_numrow[i], [Names_numrow[x] for x in L if x != i]]
+            for i, L in enumerate(Tfidf_idx)
+        ]
+        Tfidf_no_selfmatch = [x for x in Tfidf_no_selfmatch if len(x[-1]) > 0]
         print("Nb cand tf-idf :", sum([len(L) for idx, L in Tfidf_no_selfmatch]))
 
         # Add matches
         size1 = len(p1)
         Added_p1, Added_p2 = [], []
-        for idx1, Liste_idx in Tfidf_no_selfmatch :
-            id1, lat1, lon1, cat1, cat_simpl1 = train['id'].iat[idx1], train['latitude'].iat[idx1], train['longitude'].iat[idx1], train['categories'].iat[idx1], train['category_simpl'].iat[idx1]
-            for idx2 in Liste_idx :
-                if idx1 < idx2 :
-                    id2, lat2, lon2, cat2, cat_simpl2 = train['id'].iat[idx2], train['latitude'].iat[idx2], train['longitude'].iat[idx2], train['categories'].iat[idx2], train['category_simpl'].iat[idx2]
+        for idx1, Liste_idx in Tfidf_no_selfmatch:
+            id1, lat1, lon1, cat1, cat_simpl1 = (
+                train["id"].iat[idx1],
+                train["latitude"].iat[idx1],
+                train["longitude"].iat[idx1],
+                train["categories"].iat[idx1],
+                train["category_simpl"].iat[idx1],
+            )
+            for idx2 in Liste_idx:
+                if idx1 < idx2:
+                    id2, lat2, lon2, cat2, cat_simpl2 = (
+                        train["id"].iat[idx2],
+                        train["latitude"].iat[idx2],
+                        train["longitude"].iat[idx2],
+                        train["categories"].iat[idx2],
+                        train["category_simpl"].iat[idx2],
+                    )
                     key = f"{min(id1, id2)}-{max(id1, id2)}"
-                    if key not in Cand and haversine(lat1,lon1,lat2,lon2)<=thr_distance and (cat_simpl1 in far_cat_simpl or cat_simpl2 in far_cat_simpl) :
-                        poi1, poi2 = train['point_of_interest'].iat[idx1], train['point_of_interest'].iat[idx2]
-                        Cand[key] = int(poi1==poi2)
+                    if (
+                        key not in Cand
+                        and haversine(lat1, lon1, lat2, lon2) <= thr_distance
+                        and (cat_simpl1 in far_cat_simpl or cat_simpl2 in far_cat_simpl)
+                    ):
+                        poi1, poi2 = (
+                            train["point_of_interest"].iat[idx1],
+                            train["point_of_interest"].iat[idx2],
+                        )
+                        Cand[key] = int(poi1 == poi2)
                         Added_p1.append([id1, poi1])
                         Added_p2.append([id2, poi2])
-                        nb_true_matchs_initial += int(poi1==poi2)
+                        nb_true_matchs_initial += int(poi1 == poi2)
 
         p1 = p1.append(pd.DataFrame(Added_p1, columns=p1.columns)).reset_index(drop=True).copy()
         p2 = p2.append(pd.DataFrame(Added_p2, columns=p2.columns)).reset_index(drop=True).copy()
         print(f"Candidates added for tfidf n°2 (metro stations) : {len(p1)-size1}/{len(p1)}.")
-
 
 
 # In[ ]:
@@ -1054,42 +1037,42 @@ print_infos(p1, p2, N_TO_FIND)
 # In[ ]:
 
 
-
 thr_tfidf_ = 0.5
 thr_distance_ = 20
 thr_distance_or_same_cat_ = 2
 
 size = len(p1)
 
-for country in [2, 3, 32] : #range(1, 30)
-    
+for country in [2, 3, 32]:  # range(1, 30)
+
     # Reset parameters
     thr_tfidf = thr_tfidf_
     thr_distance = thr_distance_
     thr_distance_or_same_cat = thr_distance_or_same_cat_
-    
+
     # Tune parameters for each country
-    if country == 2 :
-        thr_tfidf    = 1.1 # will impose to have same category
+    if country == 2:
+        thr_tfidf = 1.1  # will impose to have same category
         thr_distance = 20
         thr_distance_or_same_cat = -1  # will impose to have same category
-    elif country == 3 :
-        thr_tfidf    = 0.6
+    elif country == 3:
+        thr_tfidf = 0.6
         thr_distance = 10
-    elif country == 32 :
-        thr_tfidf    = 0.4
-        thr_distance = 100 # no limit
-        thr_distance_or_same_cat = 100 # no limit
+    elif country == 32:
+        thr_tfidf = 0.4
+        thr_distance = 100  # no limit
+        thr_distance_or_same_cat = 100  # no limit
 
     # List of names
-    Names = train[train['country']==country]['name_initial'].copy()
-    if len(Names) == 0 : break
-        
+    Names = train[train["country"] == country]["name_initial"].copy()
+    if len(Names) == 0:
+        break
+
     print()
-    print("#"*20)
+    print("#" * 20)
     print(f"# Country n°{country} : {COUNTRIES[country-1]}.")
 
-    Names_numrow = {i:idx for i, idx in enumerate(Names.index)} # Keep initial row number
+    Names_numrow = {i: idx for i, idx in enumerate(Names.index)}  # Keep initial row number
     Names = Names.to_list()
 
     print(f"Len names : {len(Names)}.")
@@ -1100,30 +1083,52 @@ for country in [2, 3, 32] : #range(1, 30)
 
         # no self-matchs and retrieve the initial row number
         Tfidf_idx = [[Names_numrow[x] for x in L] for L in Tfidf_idx]
-   
+
         # Add matches : /!\ ONLY IF THERE IS A CATEGORY MATCH AND THE DISTANCE IS NOT TOO BIG
         size1 = len(p1)
         Added_p1, Added_p2 = [], []
-        for idx1, (Liste_idx, Liste_val) in enumerate(zip(Tfidf_idx, Tfidf_val)) :
+        for idx1, (Liste_idx, Liste_val) in enumerate(zip(Tfidf_idx, Tfidf_val)):
             idx1 = Names_numrow[idx1]
-            id1, lat1, lon1, cat1, cat_simpl1 = train['id'].iat[idx1], train['latitude'].iat[idx1], train['longitude'].iat[idx1], train['categories'].iat[idx1], train['category_simpl'].iat[idx1]
-            for idx2, val in zip(Liste_idx, Liste_val) :
-                if idx1 < idx2 :
-                    id2, lat2, lon2, cat2, cat_simpl2 = train['id'].iat[idx2], train['latitude'].iat[idx2], train['longitude'].iat[idx2], train['categories'].iat[idx2], train['category_simpl'].iat[idx2]
+            id1, lat1, lon1, cat1, cat_simpl1 = (
+                train["id"].iat[idx1],
+                train["latitude"].iat[idx1],
+                train["longitude"].iat[idx1],
+                train["categories"].iat[idx1],
+                train["category_simpl"].iat[idx1],
+            )
+            for idx2, val in zip(Liste_idx, Liste_val):
+                if idx1 < idx2:
+                    id2, lat2, lon2, cat2, cat_simpl2 = (
+                        train["id"].iat[idx2],
+                        train["latitude"].iat[idx2],
+                        train["longitude"].iat[idx2],
+                        train["categories"].iat[idx2],
+                        train["category_simpl"].iat[idx2],
+                    )
                     key = f"{min(id1, id2)}-{max(id1, id2)}"
-                    dist = haversine(lat1,lon1,lat2,lon2)
-                    same_cat = (cat_simpl1==cat_simpl2 and cat_simpl1>0) or (cat1==cat2 and cat1!='' and cat1 !='nan')
-                    if key not in Cand and dist<=thr_distance and (same_cat or dist<=thr_distance_or_same_cat) and (same_cat or val >= thr_tfidf) :
-                        poi1, poi2 = train['point_of_interest'].iat[idx1], train['point_of_interest'].iat[idx2]
-                        Cand[key] = int(poi1==poi2)
+                    dist = haversine(lat1, lon1, lat2, lon2)
+                    same_cat = (cat_simpl1 == cat_simpl2 and cat_simpl1 > 0) or (
+                        cat1 == cat2 and cat1 != "" and cat1 != "nan"
+                    )
+                    if (
+                        key not in Cand
+                        and dist <= thr_distance
+                        and (same_cat or dist <= thr_distance_or_same_cat)
+                        and (same_cat or val >= thr_tfidf)
+                    ):
+                        poi1, poi2 = (
+                            train["point_of_interest"].iat[idx1],
+                            train["point_of_interest"].iat[idx2],
+                        )
+                        Cand[key] = int(poi1 == poi2)
                         Added_p1.append([id1, poi1])
                         Added_p2.append([id2, poi2])
-                        nb_true_matchs_initial += int(poi1==poi2)
+                        nb_true_matchs_initial += int(poi1 == poi2)
 
         p1 = p1.append(pd.DataFrame(Added_p1, columns=p1.columns)).reset_index(drop=True).copy()
         p2 = p2.append(pd.DataFrame(Added_p2, columns=p2.columns)).reset_index(drop=True).copy()
         print(f"Candidates added : {len(p1)-size1}/{len(p1)}.")
-print('\n-> TF-IDF for contries finished.')
+print("\n-> TF-IDF for contries finished.")
 print(f"Candidates added : {len(p1)-size}.")
 
 
@@ -1144,27 +1149,28 @@ thr_distance_or_same_cat_ = 10
 
 size = len(p1)
 
-for country in [32] : #range(1, 30)
-    
+for country in [32]:  # range(1, 30)
+
     # Reset parameter
     thr_tfidf = thr_tfidf_
     thr_distance = thr_distance_
     thr_distance_or_same_cat = thr_distance_or_same_cat_
-    
-    # Tune parameters for each country
-    if country == 32 :
-        thr_tfidf_ = 0.4
-        thr_distance = 100 # no limit
-        thr_distance_or_same_cat = 100 # no limit
 
-    Names = train[train['country']==country]['name_initial_decode'].copy()
-    if len(Names) == 0 : break
-        
+    # Tune parameters for each country
+    if country == 32:
+        thr_tfidf_ = 0.4
+        thr_distance = 100  # no limit
+        thr_distance_or_same_cat = 100  # no limit
+
+    Names = train[train["country"] == country]["name_initial_decode"].copy()
+    if len(Names) == 0:
+        break
+
     print()
-    print("#"*20)
+    print("#" * 20)
     print(f"# Country n°{country} : {COUNTRIES[country-1]}.")
 
-    Names_numrow = {i:idx for i, idx in enumerate(Names.index)} # Keep initial row number
+    Names_numrow = {i: idx for i, idx in enumerate(Names.index)}  # Keep initial row number
     Names = Names.to_list()
 
     print(f"Len names : {len(Names)}.")
@@ -1175,30 +1181,52 @@ for country in [32] : #range(1, 30)
 
         # no self-matchs and retrieve the initial row number
         Tfidf_idx = [[Names_numrow[x] for x in L] for L in Tfidf_idx]
-  
+
         # Add matches : /!\ ONLY IF THERE IS A CATEGORY MATCH AND THE DISTANCE IS NOT TOO BIG
         size1 = len(p1)
         Added_p1, Added_p2 = [], []
-        for idx1, (Liste_idx, Liste_val) in enumerate(zip(Tfidf_idx, Tfidf_val)) :
+        for idx1, (Liste_idx, Liste_val) in enumerate(zip(Tfidf_idx, Tfidf_val)):
             idx1 = Names_numrow[idx1]
-            id1, lat1, lon1, cat1, cat_simpl1 = train['id'].iat[idx1], train['latitude'].iat[idx1], train['longitude'].iat[idx1], train['categories'].iat[idx1], train['category_simpl'].iat[idx1]
-            for idx2, val in zip(Liste_idx, Liste_val) :
-                if idx1 < idx2 :
-                    id2, lat2, lon2, cat2, cat_simpl2 = train['id'].iat[idx2], train['latitude'].iat[idx2], train['longitude'].iat[idx2], train['categories'].iat[idx2], train['category_simpl'].iat[idx2]
+            id1, lat1, lon1, cat1, cat_simpl1 = (
+                train["id"].iat[idx1],
+                train["latitude"].iat[idx1],
+                train["longitude"].iat[idx1],
+                train["categories"].iat[idx1],
+                train["category_simpl"].iat[idx1],
+            )
+            for idx2, val in zip(Liste_idx, Liste_val):
+                if idx1 < idx2:
+                    id2, lat2, lon2, cat2, cat_simpl2 = (
+                        train["id"].iat[idx2],
+                        train["latitude"].iat[idx2],
+                        train["longitude"].iat[idx2],
+                        train["categories"].iat[idx2],
+                        train["category_simpl"].iat[idx2],
+                    )
                     key = f"{min(id1, id2)}-{max(id1, id2)}"
-                    dist = haversine(lat1,lon1,lat2,lon2)
-                    same_cat = (cat_simpl1==cat_simpl2 and cat_simpl1>0) or (cat1==cat2 and cat1!='' and cat1 !='nan')
-                    if key not in Cand and dist<=thr_distance and (same_cat or dist<=thr_distance_or_same_cat) and (same_cat or val >= thr_tfidf) :
-                        poi1, poi2 = train['point_of_interest'].iat[idx1], train['point_of_interest'].iat[idx2]
-                        Cand[key] = int(poi1==poi2)
+                    dist = haversine(lat1, lon1, lat2, lon2)
+                    same_cat = (cat_simpl1 == cat_simpl2 and cat_simpl1 > 0) or (
+                        cat1 == cat2 and cat1 != "" and cat1 != "nan"
+                    )
+                    if (
+                        key not in Cand
+                        and dist <= thr_distance
+                        and (same_cat or dist <= thr_distance_or_same_cat)
+                        and (same_cat or val >= thr_tfidf)
+                    ):
+                        poi1, poi2 = (
+                            train["point_of_interest"].iat[idx1],
+                            train["point_of_interest"].iat[idx2],
+                        )
+                        Cand[key] = int(poi1 == poi2)
                         Added_p1.append([id1, poi1])
                         Added_p2.append([id2, poi2])
-                        nb_true_matchs_initial += int(poi1==poi2)
+                        nb_true_matchs_initial += int(poi1 == poi2)
 
         p1 = p1.append(pd.DataFrame(Added_p1, columns=p1.columns)).reset_index(drop=True).copy()
         p2 = p2.append(pd.DataFrame(Added_p2, columns=p2.columns)).reset_index(drop=True).copy()
         print(f"Candidates added : {len(p1)-size1}.")
-print('\n-> TF-IDF for contries finished.')
+print("\n-> TF-IDF for contries finished.")
 print(f"Candidates added : {len(p1)-size}.")
 
 
@@ -1243,9 +1271,7 @@ work_phones = {
 work["address_complet"] = work.apply(
     lambda row: create_address(row["address"], row["city"]), axis=1
 )
-work_address = (
-    work.groupby("address_complet")["index"].apply(list).to_frame().reset_index()
-)
+work_address = work.groupby("address_complet")["index"].apply(list).to_frame().reset_index()
 work_address = dict(zip(work_address["address_complet"], work_address["index"]))
 work_address = {
     address: Liste_idx
@@ -1312,9 +1338,7 @@ del Potential_on_NamePhone_new, train_numpy
 gc.collect()
 
 # Number of potential matchs
-print(
-    f"Potential match on name/phone/address : {sum(len(x) for x in Potential_on_NamePhone)}."
-)
+print(f"Potential match on name/phone/address : {sum(len(x) for x in Potential_on_NamePhone)}.")
 
 
 # In[ ]:
@@ -1436,10 +1460,15 @@ get_CV(
 
 # In[ ]:
 
-
 p1_yv = p1.copy()
 p2_yv = p2.copy()
 
 if not DEBUG:
-    p1_yv.to_csv(OUT_PATH + "p1_yv.csv", index=False)
-    p2_yv.to_csv(OUT_PATH + "p2_yv.csv", index=False)
+    if IS_TEST:
+        p1_yv.to_csv(OUT_PATH + "p1_yv_test.csv", index=False)
+        p2_yv.to_csv(OUT_PATH + "p2_yv_test.csv", index=False)
+    else:
+        p1_yv.to_csv(OUT_PATH + "p1_yv_train.csv", index=False)
+        p2_yv.to_csv(OUT_PATH + "p2_yv_train.csv", index=False)
+
+print("Done !")
