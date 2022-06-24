@@ -17,6 +17,7 @@ random.seed(13)
 
 if IS_TEST:
     train = pd.read_csv(DATA_PATH + "test.csv")
+    train["point_of_interest"] = 0
 else:
     train = pd.read_csv(DATA_PATH + "train.csv")
 

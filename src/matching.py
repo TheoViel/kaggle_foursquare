@@ -205,6 +205,9 @@ def get_CV(p1, p2, y, oof_preds, train):
 
 
 def print_infos(p1, p2=None, N_TO_FIND=360000):
+    if N_TO_FIND <= 0:
+        return
+
     p1 = p1.reset_index(drop=True)
 
     if p2 is not None:
@@ -230,9 +233,9 @@ def print_infos(p1, p2=None, N_TO_FIND=360000):
     )
     found = clusts["id"].apply(lambda x: len(x)).sum()
 
-    print(f"Number of candidates : {numerize(len(p1))}")
+    print(f"\nNumber of candidates : {numerize(len(p1))}")
     print(f"Proportion of positive candidates: {p1.y.mean() * 100:.2f}%")
-    print(f"Proportion of found matches: {found / N_TO_FIND * 100:.2f}%")
+    print(f"Proportion of found matches: {found / N_TO_FIND * 100:.2f}%\n")
 
 
 ##########################
