@@ -86,14 +86,24 @@ def cci(x, y):  # count y in x (intersection)
     return i
 
 
-def get_CV(p1, p2, y, oof_preds, train):
+def get_CV(p1, p2, y, oof_preds, train, df2=None):
     cv0 = 0
     cut0 = 0
     # first, construct composite dataframe
-    df2 = p1[["id"]]
-    df2["id2"] = p2["id"]
+    if df2 is None:
+        df2 = p1[["id"]]
+        df2["id2"] = p2["id"]
+
+    else:
+        try:
+            df2 = df2[['id_1', 'id_2']]
+        except KeyError:
+            pass
+        df2.columns = ['id', 'id2']
+
     df2["y"] = y
     df2["match"] = oof_preds.astype("float32")
+
     df2 = df2.merge(train[["id", "m_true"]], on="id", how="left")  # bring in m_true
     cut2 = 0.8  # hardcode for now
     for cut1 in [0, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65]:
@@ -192,18 +202,16 @@ def get_CV(p1, p2, y, oof_preds, train):
             cv0 = cv
             cut0 = cut1
 
-        if (y == oof_preds).all():
-            print("Highest reachable IoU :", np.round(cv, 4))
-            return
-        print(cut1, "CV***", np.round(cv, 4))
+        if cut1 == 0:
+            print("- Highest reachable IoU :", np.round(cv, 4))
+        else:
+            print(f"- Threshold {cut1} : CV {cv:.4f}")
 
-    print(
-        "best cut is",
-        cut0,
-        "best CV is",
-        np.round(cv0, 4),
-        "*************************************************************************",
-    )
+        if (y == oof_preds).all():
+            return
+
+    print(f"\n-> Best Threshold {cut0} : CV {cv0:.4f}")
+
     return cut0, cv0
 
 

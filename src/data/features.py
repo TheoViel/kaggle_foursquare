@@ -45,7 +45,14 @@ def compute_string_distance(fct, a, b):
 
 
 def compute_string_distances(df, string_columns, verbose=0):
-    functions = [lcs, gesh, levenshtein, jaro, wratio, partial_ratio]
+    functions = [
+        # lcs,
+        gesh,
+        levenshtein,
+        jaro,
+        wratio,
+        partial_ratio
+    ]
 
     features = []
     for col in string_columns:

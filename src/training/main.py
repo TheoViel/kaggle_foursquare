@@ -34,6 +34,9 @@ def train(config, tokenizer, df_train, df_val, triplets_train, triplets_val, fol
         triplets_train,
         tokenizer,
         max_len=config.max_len,
+        use_name=config.use_name,
+        use_address=config.use_address,
+        use_url=config.use_url,
         train=True,
     )
 
@@ -41,6 +44,9 @@ def train(config, tokenizer, df_train, df_val, triplets_train, triplets_val, fol
         df_val,
         triplets_val,
         tokenizer,
+        use_name=config.use_name,
+        use_address=config.use_address,
+        use_url=config.use_url,
         max_len=config.max_len,
     )
 

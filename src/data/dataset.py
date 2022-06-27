@@ -12,8 +12,9 @@ class TripletDataset(Dataset):
         tokenizer,
         max_len=100,
         train=False,
-        use_url=False,
+        use_name=True,
         use_address=True,
+        use_url=False,
     ):
         self.df = df
         self.triplets = triplets
@@ -23,7 +24,7 @@ class TripletDataset(Dataset):
 
         self.use_url = use_url
         self.use_address = use_address
-        self.use_name = True
+        self.use_name = use_name
         self.n = self.use_url + self.use_address + self.use_name
 
     def encode(self, row):

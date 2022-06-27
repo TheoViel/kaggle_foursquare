@@ -17,7 +17,7 @@ def objective_xgb(trial, df_train, df_val, features, target="match"):
 
     model = XGBClassifier(
         **xgb_params,
-        n_estimators=1000,
+        n_estimators=10000,
         learning_rate=0.1,
         objective="binary:logistic",
         eval_metric="auc",
@@ -58,7 +58,7 @@ def train_xgb(
 
     model = XGBClassifier(
         **params,
-        n_estimators=5000,
+        n_estimators=10000,
         objective="binary:logistic",
         learning_rate=0.05,
         eval_metric="auc",
@@ -108,7 +108,7 @@ def lofo_xgb(df, config, folds=[0], auto_group_threshold=1):
 
     model = XGBClassifier(
         **config.params,
-        n_estimators=1000,
+        n_estimators=10000,
         learning_rate=0.1,
         objective="binary:logistic",
         eval_metric="auc",

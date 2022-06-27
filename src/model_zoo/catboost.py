@@ -19,7 +19,7 @@ def objective_catboost(trial, df_train, df_val, features, target="match"):
 
     model = CatBoostClassifier(
         **catboost_params,
-        n_estimators=2000,
+        n_estimators=10000,
         learning_rate=0.1,
         objective="binary:logistic",
         eval_metric="auc",
@@ -60,7 +60,7 @@ def train_catboost(
 
     model = CatBoostClassifier(
         **params,
-        n_estimators=5000,
+        n_estimators=20000,
         learning_rate=0.1,
         classes_count=0,
         # boosting_type='Plain',
@@ -103,7 +103,7 @@ def lofo_catboost(df, config, folds=[0], auto_group_threshold=1):
 
     model = CatBoostClassifier(
         **config.params,
-        n_estimators=1000,
+        n_estimators=10000,
         objective="binary:logistic",
         learning_rate=0.1,
         eval_metric="auc",

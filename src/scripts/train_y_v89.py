@@ -2307,7 +2307,14 @@ y0 = df2['y'].sum()
 a0 = np.minimum(1,df2.groupby('id')['y'].sum()).sum()
 for cut in [-.1, .001, .002,  .003, .005, .007, .01, .02, .05]:
     a = df2.loc[df2['p']>cut].groupby('id')['y'].sum().reset_index()
-    print('reduce data size:', cut, df2.loc[df2['p']>cut].shape[0], df2['y'].loc[df2['p']>cut].sum(), y0 - df2['y'].loc[df2['p']>cut].sum(), np.minimum(1,a['y']).sum(), a0- np.minimum(1,a['y']).sum())
+    print('reduce data size:', 
+    cut, 
+    df2.loc[df2['p']>cut].shape[0], 
+    df2['y'].loc[df2['p']>cut].sum(), 
+    y0 - df2['y'].loc[df2['p']>cut].sum(), 
+    np.minimum(1,a['y']).sum(), 
+    a0- np.minimum(1,a['y']).sum()
+)
 
 # select subset of data
 idx = oof_preds > .007 # hardcode .007 here - for now.
