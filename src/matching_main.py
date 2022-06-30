@@ -1,8 +1,3 @@
-# # **Librairies**
-
-# In[4]:
-
-
 import gc
 import random
 import warnings
@@ -11,8 +6,24 @@ import pandas as pd
 from tqdm.auto import tqdm
 
 from params import DEBUG, OUT_PATH, IS_TEST
-from ressources import *
-from matching import *
+from ressources import COUNTRIES
+from matching import (
+    load_cleaned_data,
+    print_infos,
+    lcs,
+    lcs2,
+    distance,
+    pi1,
+    substring_ratio,
+    subseq_ratio,
+    ll_lcs,
+    get_CV,
+    Compute_Mdist_Mindex,
+    vectorisation_similarite,
+    haversine,
+    create_address,
+    find_potential_matchs,
+)
 
 random.seed(13)
 warnings.simplefilter("ignore")
@@ -20,7 +31,7 @@ warnings.simplefilter("ignore")
 
 # ## Load Data
 
-# In[ ]:
+# In[5]:
 
 
 if IS_TEST:
@@ -29,33 +40,16 @@ else:
     train = load_cleaned_data(OUT_PATH + "cleaned_data_train.csv")
 
 
-# In[ ]:
+# In[6]:
 
 
 if DEBUG:
     train = train.head(10000)
 
 
-# In[ ]:
-
-
-# train_tmp = pd.read_csv(DATA_PATH + "train.csv")
-
-# poi_mapping = {
-#     p: m
-#     for p, m in zip(
-#         train_tmp["point_of_interest"],
-#         train_tmp["point_of_interest"].astype("category").cat.codes,
-#     )
-# }
-
-# del train_tmp
-# gc.collect()
-
-
 # ### Target
 
-# In[ ]:
+# In[7]:
 
 
 if not IS_TEST:
@@ -68,6 +62,7 @@ if not IS_TEST:
     clusts = clusts[clusts["id"].apply(lambda x: len(x) > 1)]
 
     N_TO_FIND = clusts["id"].apply(lambda x: len(x)).sum()
+    print(N_TO_FIND)
 
     example = clusts.explode("id").sort_values("id")
     example["y"] = 1
@@ -84,7 +79,7 @@ else:
 
 # ## Matching
 
-# In[ ]:
+# In[8]:
 
 
 p3 = train[["country", "id", "point_of_interest", "phone", "lon2"]].copy()
@@ -97,7 +92,7 @@ p3 = (
 
 # ### Phone
 
-# In[ ]:
+# In[9]:
 
 
 idx1 = []
@@ -114,7 +109,7 @@ p1 = p3[["id", "point_of_interest"]].loc[idx1].reset_index(drop=True)
 p2 = p3[["id", "point_of_interest"]].loc[idx2].reset_index(drop=True)
 
 
-# In[ ]:
+# In[10]:
 
 
 print_infos(p1, p2, N_TO_FIND)
@@ -122,10 +117,11 @@ print_infos(p1, p2, N_TO_FIND)
 
 # ### Lat / lon 22m² square
 
-# In[ ]:
+# In[11]:
 
 
-# lat/lon, rounded to 2 x 4 digits = 22* meters square; there should not be too many false positives this close to each other
+# lat/lon, rounded to 2 x 4 digits = 22* meters square;
+# there should not be too many false positives this close to each other
 # do this in 4 blocks, shifted by 1/2 size, to avoid cut-offs
 for s1 in [0, 5e-5]:
     for s2 in [0, 5e-5]:
@@ -158,7 +154,7 @@ for s1 in [0, 5e-5]:
         p2 = p2.append(p2a, ignore_index=True)
 
 
-# In[ ]:
+# In[12]:
 
 
 print_infos(p1, p2, N_TO_FIND)
@@ -166,7 +162,7 @@ print_infos(p1, p2, N_TO_FIND)
 
 # ### Url
 
-# In[ ]:
+# In[13]:
 
 
 p3 = train[["country", "id", "point_of_interest", "url", "lon2", "lat2"]].copy()
@@ -190,7 +186,7 @@ p1 = p1.append(p1a, ignore_index=True)
 p2 = p2.append(p2a, ignore_index=True)
 
 
-# In[ ]:
+# In[14]:
 
 
 print_infos(p1, p2, N_TO_FIND)
@@ -198,7 +194,7 @@ print_infos(p1, p2, N_TO_FIND)
 
 # ### Categories
 
-# In[ ]:
+# In[15]:
 
 
 p3 = train[["country", "id", "point_of_interest", "categories", "lon2", "lat2"]].copy()
@@ -222,7 +218,7 @@ p1 = p1.append(p1a, ignore_index=True)
 p2 = p2.append(p2a, ignore_index=True)
 
 
-# In[ ]:
+# In[16]:
 
 
 print_infos(p1, p2, N_TO_FIND)
@@ -230,7 +226,7 @@ print_infos(p1, p2, N_TO_FIND)
 
 # ### Address
 
-# In[ ]:
+# In[17]:
 
 
 p3 = train[["country", "id", "point_of_interest", "address", "lon2", "lat2"]].copy()
@@ -254,7 +250,7 @@ p1 = p1.append(p1a, ignore_index=True)
 p2 = p2.append(p2a, ignore_index=True)
 
 
-# In[ ]:
+# In[18]:
 
 
 print_infos(p1, p2, N_TO_FIND)
@@ -262,7 +258,7 @@ print_infos(p1, p2, N_TO_FIND)
 
 # ### Name
 
-# In[ ]:
+# In[19]:
 
 
 # name
@@ -287,7 +283,7 @@ p1 = p1.append(p1a, ignore_index=True)
 p2 = p2.append(p2a, ignore_index=True)
 
 
-# In[ ]:
+# In[20]:
 
 
 print_infos(p1, p2, N_TO_FIND)
@@ -295,7 +291,7 @@ print_infos(p1, p2, N_TO_FIND)
 
 # ### Latitude
 
-# In[ ]:
+# In[21]:
 
 
 p3 = train[["country", "id", "point_of_interest", "name", "latitude"]].copy()
@@ -315,7 +311,7 @@ p1 = p1.append(p1a, ignore_index=True)
 p2 = p2.append(p2a, ignore_index=True)
 
 
-# In[ ]:
+# In[22]:
 
 
 print_infos(p1, p2, N_TO_FIND)
@@ -323,7 +319,7 @@ print_infos(p1, p2, N_TO_FIND)
 
 # ### Longitude
 
-# In[ ]:
+# In[23]:
 
 
 p3 = train[["country", "id", "point_of_interest", "name", "longitude"]].copy()
@@ -343,13 +339,13 @@ p1 = p1.append(p1a, ignore_index=True)
 p2 = p2.append(p2a, ignore_index=True)
 
 
-# In[ ]:
+# In[24]:
 
 
 print_infos(p1, p2, N_TO_FIND)
 
 
-# In[ ]:
+# In[25]:
 
 
 p1["y"] = np.array(p1["point_of_interest"] == p2["point_of_interest"]).astype(np.int8)
@@ -365,7 +361,7 @@ print(
 # ## Name lcs
 # - Slow
 
-# In[ ]:
+# In[26]:
 
 
 p3 = train[
@@ -396,7 +392,7 @@ names = p3["name"].to_numpy()
 lon2 = p3["longitude"].to_numpy()
 
 
-# In[ ]:
+# In[27]:
 
 
 idx1 = []
@@ -422,13 +418,13 @@ p1 = p1.append(p1a, ignore_index=True)
 p2 = p2.append(p2a, ignore_index=True)
 
 
-# In[ ]:
+# In[28]:
 
 
 print_infos(p1, p2, N_TO_FIND)
 
 
-# In[ ]:
+# In[29]:
 
 
 p1["y"] = np.array(p1["point_of_interest"] == p2["point_of_interest"]).astype(np.int8)
@@ -443,7 +439,7 @@ print(
 
 # ### Clean
 
-# In[ ]:
+# In[30]:
 
 
 # remove duplicate pairs
@@ -469,13 +465,13 @@ del p12, idx
 gc.collect()
 
 
-# In[ ]:
+# In[31]:
 
 
 print_infos(p1, p2, N_TO_FIND)
 
 
-# In[ ]:
+# In[32]:
 
 
 p1["y"] = np.array(p1["point_of_interest"] == p2["point_of_interest"]).astype(np.int8)
@@ -488,7 +484,7 @@ print(
 )
 
 
-# In[ ]:
+# In[33]:
 
 
 del d, names, lon2, p3, idx1, idx2, p1a, p2a, lat, lon
@@ -499,7 +495,7 @@ gc.collect()
 
 # ### Sort to put similar points next to each other - for constructing pairs
 
-# In[ ]:
+# In[34]:
 
 
 sort = [
@@ -516,17 +512,22 @@ sort = [
 ]
 
 train = train.sort_values(by=sort).reset_index(drop=True)
-train.drop(
-    ["lat2", "lon2", "name2"], axis=1, inplace=True
-)  # these are no longer needed
 
 
 # ## Construct pairs
 
-# In[ ]:
+# In[35]:
 
 
-cols = ["id", "latitude", "longitude", "point_of_interest", "name", "category_simpl"]
+cols = [
+    "id",
+    "latitude",
+    "longitude",
+    "point_of_interest",
+    "name",
+    "category_simpl",
+    "name_initial_decode",
+]
 colsa = ["id", "point_of_interest"]
 
 p1a = train[colsa].copy()
@@ -537,13 +538,13 @@ p1 = p1.append(p1a, ignore_index=True)
 p2 = p2.append(p2a, ignore_index=True)
 
 
-# In[ ]:
+# In[36]:
 
 
 print_infos(p1, p2, N_TO_FIND)
 
 
-# In[ ]:
+# In[37]:
 
 
 p1_svg = p1.copy()
@@ -553,7 +554,7 @@ p2_svg = p2.copy()
 # ### Add more shifts
 # - Slow (15min)
 
-# In[ ]:
+# In[38]:
 
 
 p1 = p1_svg.copy()
@@ -623,33 +624,13 @@ for i, s in enumerate(tqdm(range(2, 121))):  # 121
     p1 = p1.append(train[colsa].loc[idx], ignore_index=True)
     p2 = p2.append(p2a[colsa].loc[idx], ignore_index=True)
 
-    if (s < 10) or not (s % 10):
+    if not (s % 10):
         # get stats; overstated b/c dups are not excluded yet
         print(f"{i}, s={s}")
         print_infos(p1, p2, N_TO_FIND)
         print()
 
-        p1["y"] = np.array(p1["point_of_interest"] == p2["point_of_interest"]).astype(
-            np.int8
-        )
-        a = p1.groupby("id")["y"].sum().reset_index()
-        print(
-            i,
-            maxdist,
-            s,
-            s2,
-            p1.shape[0],
-            p1["y"].sum(),
-            np.minimum(1, a["y"]).sum(),
-            "sec",
-        )
-
     gc.collect()
-
-#     break
-
-# del p1a, p2a, dist, idx
-gc.collect()
 
 
 # In[ ]:
@@ -696,7 +677,7 @@ get_CV(
 )
 
 
-# ### Add close candidates 
+# ### Add close candidates
 # - Slow
 
 # In[ ]:
@@ -749,14 +730,14 @@ for country_ in [2, 3]:
                     try:
                         if key_idx not in new_cand:
                             new_true_match += int(infos[idx1, -1] == infos[idx2, -1])
-                    except:
+                    except Exception:
                         pass
                     new_cand.add(key_idx)
 
     # Add new candidates
     New_candidates += [list(x) for x in new_cand]
     print(
-        f"Country {country_} ({COUNTRIES[country_-1]}) : {new_true_match}/{len(new_cand)} new cand added."
+        f"Country {country_} ({COUNTRIES[country_-1]}) : {new_true_match}/{len(new_cand)} added."
     )
 
 
@@ -774,15 +755,18 @@ for idx1, idx2 in New_candidates:
     )
     Added_p1.append([id1, poi1, 0])
     Added_p2.append([id2, poi2])
+
 Added_p1 = pd.DataFrame(Added_p1, columns=p1.columns)
 Added_p2 = pd.DataFrame(Added_p2, columns=p2.columns)
 for col in Added_p1.columns:
     Added_p1[col] = Added_p1[col].astype(p1[col].dtype)
 for col in Added_p2.columns:
     Added_p2[col] = Added_p2[col].astype(p2[col].dtype)
+
 p1 = p1.append(Added_p1).reset_index(drop=True).copy()
 p2 = p2.append(Added_p2).reset_index(drop=True).copy()
-print(f"Candidates added : {len(p1)-size1}/{len(p1)}.")
+
+print(f"Candidates added : {len(p1) - size1}/{len(p1)}.")
 
 
 # In[ ]:
@@ -811,13 +795,13 @@ del p12, idx, matrix
 gc.collect()
 
 
-# In[ ]:
+# In[49]:
 
 
 print_infos(p1, p2, N_TO_FIND)
 
 
-# In[ ]:
+# In[50]:
 
 
 get_CV(
@@ -836,9 +820,148 @@ p1_svg = p1.copy()
 p2_svg = p2.copy()
 
 
+# ### Add close candidates v2
+# - TODO
+
+# In[51]:
+
+
+p1 = p1_svg.copy()
+p2 = p2_svg.copy()
+
+train["lat2"] = np.round(train["latitude"], 0).astype("int8")
+train["lon2"] = np.round(train["longitude"], 0).astype("int8")
+
+# sort to put similar points next to each other - for constructing pairs
+sort = [
+    "category_simpl",
+    "lat2",
+    "lon2",
+    "name2",
+    "latitude",
+    "city",
+    "cat2",
+    "name",
+    "address",
+    "country",
+    "id",
+]
+train = train.sort_values(by=sort).reset_index(drop=True)
+
+maxdist = (train["q90"] * 400 + train["q99"] * 400).to_numpy()
+
+
+# In[52]:
+
+# add more shifts, only for short distances or for partial name matches
+for i, s in enumerate(tqdm(range(1, 50))):  # 121
+
+    s2 = s  # shift
+    p2a = train[cols].iloc[s2:, :]
+    p2a = p2a.append(train[cols].iloc[:s2, :], ignore_index=True)
+
+    # drop pairs with large distances
+    same_cat_simpl = (train['category_simpl'] == p2a['category_simpl']).to_numpy()
+
+    dist = distance(
+        np.array(train['latitude']),
+        np.array(train['longitude']),
+        np.array(p2a['latitude']),
+        np.array(p2a['longitude'])
+    )
+
+    ii = np.zeros(train.shape[0], dtype=np.int8)
+    x1 = train[['name', 'name_initial_decode']].to_numpy()
+    x2 = p2a[['name', 'name_initial_decode']].to_numpy()
+
+    for j in range(train.shape[0]):  # pi1 adds 14K matches
+
+        if same_cat_simpl[j] and dist[j] < maxdist[j]:
+
+            name1, name2 = x1[j][0], x2[j][0]
+            name_ini1, name_ini2 = x1[j][1], x2[j][1]
+
+            if pi1(name1, name2) == 1:
+                ii[j] = 1
+            elif substring_ratio(name1, name2) >= 0.6:
+                ii[j] = 1
+            elif subseq_ratio(name1, name2) >= 0.7:
+                ii[j] = 1
+            elif len(name1) >= 6 and len(name2) >= 6 and name1.endswith(name2[-6:]):
+                ii[j] = 1
+
+            # elif has_common_word(name_ini1, name_ini2, min_len=6) :
+            #    ii[j] = 1
+            # elif word_in_common(name_ini1, name_ini2, min_len_word=6):
+            #    ii[j] = 1
+            # elif subword_in_common(name_ini1, name_ini2, min_len_word=6) :
+            #    ii[j]=1
+
+    idx = (ii > 0)
+
+    p1 = p1.append(train[colsa].loc[idx], ignore_index=True)
+    p2 = p2.append(p2a[colsa].loc[idx], ignore_index=True)
+
+    if s < 10 or s % 10 == 0:
+        # get stats; overstated b/c dups are not excluded yet
+        print(f"{i}, s={s}")
+        print_infos(p1, p2, N_TO_FIND)
+        print()
+
+del p2a, dist, idx
+gc.collect()
+
+# In[53]:
+
+
+# remove duplicate pairs
+p12 = pd.concat([p1["id"], p2["id"]], axis=1)
+p12.columns = ["id", "id2"]
+p12 = p12.reset_index()
+
+# flip - only keep one of the flipped pairs, the other one is truly redundant
+idx = p12["id"] > p12["id2"]
+p12["t"] = p12["id"]
+p12["id"].loc[idx] = p12["id2"].loc[idx]
+p12["id2"].loc[idx] = p12["t"].loc[idx]
+
+p12 = p12.sort_values(by=["id", "id2"]).reset_index(drop=True)
+p12 = p12.drop_duplicates(subset=["id", "id2"])
+
+# also drop id == id2 - it may happen
+p12 = p12.loc[p12["id"] != p12["id2"]]
+p1 = p1.loc[p12["index"]].reset_index(drop=True)
+p2 = p2.loc[p12["index"]].reset_index(drop=True)
+
+
+# In[54]:
+
+
+print_infos(p1, p2, N_TO_FIND)
+
+
+# In[55]:
+
+
+get_CV(
+    p1,
+    p2,
+    np.array(p1["point_of_interest"] == p2["point_of_interest"]).astype(np.int8),
+    np.array(p1["point_of_interest"] == p2["point_of_interest"]).astype(np.int8),
+    train,
+)
+
+
+# In[56]:
+
+
+p1_svg = p1.copy()
+p2_svg = p2.copy()
+
+
 # ### Candidates in initial Youri's solution
 
-# In[ ]:
+# In[57]:
 
 
 p1["y"] = np.array(p1["point_of_interest"] == p2["point_of_interest"]).astype(np.int8)
@@ -854,14 +977,14 @@ for i, (id1, id2) in enumerate(zip(p1["id"], p2["id"])):
 
 # ### TF-IDF n°1 : airports
 
-# In[ ]:
+# In[58]:
 
 
 p1 = p1_svg.copy()
 p2 = p2_svg.copy()
 
 
-# In[ ]:
+# In[59]:
 
 
 far_cat_simpl = [1, 2]
@@ -949,7 +1072,7 @@ for col_name in ["name_initial_decode"]:
                         train["category_simpl"].iat[idx2],
                     )
                     key = f"{min(id1, id2)}-{max(id1, id2)}"
-                    # same_cat = (cat_simpl1==cat_simpl2 and cat_simpl1>0) or (cat1==cat2 and cat1!='')
+
                     if (
                         key not in Cand
                         and (cat_simpl1 == 1 or cat_simpl2 == 1)
@@ -980,7 +1103,7 @@ for col_name in ["name_initial_decode"]:
         print(f"Candidates added for tfidf n°1 (airports) : {len(p1)-size1}/{len(p1)}.")
 
 
-# In[ ]:
+# In[60]:
 
 
 print_infos(p1, p2, N_TO_FIND)
@@ -988,7 +1111,7 @@ print_infos(p1, p2, N_TO_FIND)
 
 # ### TF-IDF n°2 : metro stations
 
-# In[ ]:
+# In[61]:
 
 
 far_cat_simpl = [4]
@@ -1077,7 +1200,7 @@ for col_name in ["name_initial", "name_initial_decode"]:
         )
 
 
-# In[ ]:
+# In[62]:
 
 
 print_infos(p1, p2, N_TO_FIND)
@@ -1085,7 +1208,7 @@ print_infos(p1, p2, N_TO_FIND)
 
 # ### TF-IDF n°3a : for each countries (with initial unprocessed name)
 
-# In[ ]:
+# In[63]:
 
 
 thr_tfidf_ = 0.5
@@ -1123,7 +1246,9 @@ for country in [2, 3, 32]:  # range(1, 30)
     print("#" * 20)
     print(f"# Country n°{country} : {COUNTRIES[country-1]}.")
 
-    Names_numrow = {i: idx for i, idx in enumerate(Names.index)}  # Keep initial row number
+    Names_numrow = {
+        i: idx for i, idx in enumerate(Names.index)
+    }  # Keep initial row number
     Names = Names.to_list()
 
     print(f"Len names : {len(Names)}.")
@@ -1176,15 +1301,23 @@ for country in [2, 3, 32]:  # range(1, 30)
                         Added_p2.append([id2, poi2])
                         nb_true_matchs_initial += int(poi1 == poi2)
 
-        p1 = p1.append(pd.DataFrame(Added_p1, columns=p1.columns[:2])).reset_index(drop=True).copy()
-        p2 = p2.append(pd.DataFrame(Added_p2, columns=p2.columns[:2])).reset_index(drop=True).copy()
+        p1 = (
+            p1.append(pd.DataFrame(Added_p1, columns=p1.columns[:2]))
+            .reset_index(drop=True)
+            .copy()
+        )
+        p2 = (
+            p2.append(pd.DataFrame(Added_p2, columns=p2.columns[:2]))
+            .reset_index(drop=True)
+            .copy()
+        )
         print(f"Candidates added : {len(p1)-size1}/{len(p1)}.")
 
 print("\n-> TF-IDF for contries finished.")
 print(f"Candidates added : {len(p1)-size}.")
 
 
-# In[ ]:
+# In[64]:
 
 
 print_infos(p1, p2, N_TO_FIND)
@@ -1192,7 +1325,7 @@ print_infos(p1, p2, N_TO_FIND)
 
 # ### TF-IDF n°3b : for each countries (with few processed name)
 
-# In[ ]:
+# In[65]:
 
 
 thr_tfidf_ = 0.45
@@ -1222,7 +1355,9 @@ for country in [32]:  # range(1, 30)
     print("#" * 20)
     print(f"# Country n°{country} : {COUNTRIES[country-1]}.")
 
-    Names_numrow = {i: idx for i, idx in enumerate(Names.index)}  # Keep initial row number
+    Names_numrow = {
+        i: idx for i, idx in enumerate(Names.index)
+    }  # Keep initial row number
     Names = Names.to_list()
 
     print(f"Len names : {len(Names)}.")
@@ -1275,15 +1410,23 @@ for country in [32]:  # range(1, 30)
                         Added_p2.append([id2, poi2])
                         nb_true_matchs_initial += int(poi1 == poi2)
 
-        p1 = p1.append(pd.DataFrame(Added_p1, columns=p1.columns[:2])).reset_index(drop=True).copy()
-        p2 = p2.append(pd.DataFrame(Added_p2, columns=p2.columns[:2])).reset_index(drop=True).copy()
+        p1 = (
+            p1.append(pd.DataFrame(Added_p1, columns=p1.columns[:2]))
+            .reset_index(drop=True)
+            .copy()
+        )
+        p2 = (
+            p2.append(pd.DataFrame(Added_p2, columns=p2.columns[:2]))
+            .reset_index(drop=True)
+            .copy()
+        )
         print(f"Candidates added : {len(p1)-size1}.")
 
 print("\n-> TF-IDF for contries finished.")
 print(f"Candidates added : {len(p1)-size}.")
 
 
-# In[ ]:
+# In[66]:
 
 
 print_infos(p1, p2, N_TO_FIND)
@@ -1291,7 +1434,7 @@ print_infos(p1, p2, N_TO_FIND)
 
 # ### Add candidates based on same name/phone/address
 
-# In[ ]:
+# In[67]:
 
 
 # Création d'un df de travail
@@ -1335,14 +1478,14 @@ work_address = {
 }  # Don't consider too widespread address
 
 
-# In[ ]:
+# In[68]:
 
 
 # Process
 # tqdm.pandas()
 # Potential_on_NamePhone = work.progress_apply(find_potential_matchs, axis=1).to_list()
 Potential_on_NamePhone = work.apply(
-    lambda row: find_potential_matchs(row, work_names, work_phones, work_address),
+    lambda row: find_potential_matchs(row, work_names, work_phones, work_address),  # noqa
     axis=1,
 ).to_list()
 
@@ -1398,16 +1541,15 @@ print(
 )
 
 
-# In[ ]:
+# In[69]:
 
 
 # Add matches
 size1 = len(p1)
 Added_p1, Added_p2 = [], []
-try:
-    seen
-except:
-    seen = set()
+
+
+seen = set()
 for idx1, Liste_idx in enumerate(Potential_on_NamePhone):
 
     id1, lat1, lon1, cat1, cat_simpl1 = (
@@ -1467,7 +1609,7 @@ del (
 gc.collect()
 
 
-# In[ ]:
+# In[70]:
 
 
 print_infos(p1, p2, N_TO_FIND)
@@ -1475,7 +1617,7 @@ print_infos(p1, p2, N_TO_FIND)
 
 # ### Final PP
 
-# In[ ]:
+# In[71]:
 
 
 # Reset index after Vincent's candidate addition
@@ -1505,13 +1647,13 @@ del p12, idx
 gc.collect()
 
 
-# In[ ]:
+# In[72]:
 
 
 print_infos(p1, p2, N_TO_FIND)
 
 
-# In[ ]:
+# In[73]:
 
 
 get_CV(
@@ -1523,18 +1665,15 @@ get_CV(
 )
 
 
-# In[ ]:
+# In[74]:
 
-
-p1_yv = p1.copy()
-p2_yv = p2.copy()
 
 if not DEBUG:
     if IS_TEST:
-        p1_yv.to_csv(OUT_PATH + "p1_yv_test.csv", index=False)
-        p2_yv.to_csv(OUT_PATH + "p2_yv_test.csv", index=False)
+        p1.to_csv(OUT_PATH + "p1_yv_test.csv", index=False)
+        p2.to_csv(OUT_PATH + "p2_yv_test.csv", index=False)
     else:
-        p1_yv.to_csv(OUT_PATH + "p1_yv_train.csv", index=False)
-        p2_yv.to_csv(OUT_PATH + "p2_yv_train.csv", index=False)
+        p1.to_csv(OUT_PATH + "p1_yv_train.csv", index=False)
+        p2.to_csv(OUT_PATH + "p2_yv_train.csv", index=False)
 
 print("Done !")

@@ -505,20 +505,21 @@ def FE2(df, p1, p2, train, ressources_path="", size_ratio=1):
     num_digits2 = 2  # digits for ratios
 
     # list of features to skip due to low fi (<0.00015)
-    f_skip1 = set(df.columns)
+    # f_skip1 = set(df.columns)
+    to_skip = set(df.columns) & set(F_SKIP0)
 
     for col in [
-        "name_initial",
-        "name_initial_decode",
-        "nameC",
+        # "name_initial",
+        # "name_initial_decode",
+        # "nameC",
         "name",
-        "categories",
-        "address",
-        "url",
-        "city",
-        "state",
-        "zip",
-        "phone",
+        # "categories",
+        # "address",
+        # "url",
+        # "city",
+        # "state",
+        # "zip",
+        # "phone",
     ]:
         print("- Features for column", col)
         x1, x2 = p1[col].to_numpy(), p2[col].to_numpy()
@@ -526,7 +527,7 @@ def FE2(df, p1, p2, train, ressources_path="", size_ratio=1):
         dfp.columns = [col + "_1", col + "_2"]
 
         name = col + "_cclcs"  # cclcs = count of common substrings of length X+
-        if name not in f_skip1 and name not in F_SKIP0:  # skip to save time
+        if name not in to_skip:  # skip to save time
             # for i in range(df.shape[0]):
             #     ii[i] = cc_lcs(x1[i], x2[i], 4)
             # df[name] = ii
@@ -535,7 +536,7 @@ def FE2(df, p1, p2, train, ressources_path="", size_ratio=1):
             )
 
         name = col + "_lllcs"  # lllcs = total length of common substrings of length X+
-        if name not in f_skip1:  # skip to save time
+        if name not in to_skip:  # skip to save time
             min_len = 1 if col == "nameC" else 5
 
             # for i in range(df.shape[0]):
@@ -547,7 +548,7 @@ def FE2(df, p1, p2, train, ressources_path="", size_ratio=1):
             )
 
         name = col + "_lcs2"  # lcs2 = longest common substring
-        if name not in f_skip1:  # skip to save time
+        if name not in to_skip:  # skip to save time
             # for i in range(df.shape[0]):
             #     ii[i] = lcs2(x1[i], x2[i])
             # df[name] = ii
@@ -557,7 +558,7 @@ def FE2(df, p1, p2, train, ressources_path="", size_ratio=1):
             )
 
         name = col + "_lcs"  # lcs = longest common subsequence
-        if name not in f_skip1:  # skip to save time
+        if name not in to_skip:  # skip to save time
             # for i in range(df.shape[0]):
             #     ii[i] = lcs(x1[i], x2[i])
             # df[name] = ii
@@ -567,7 +568,7 @@ def FE2(df, p1, p2, train, ressources_path="", size_ratio=1):
             )
 
         name = col + "_pi1"  # pi1 = partial intersection, start of string
-        if name not in f_skip1:  # skip to save time
+        if name not in to_skip:  # skip to save time
             for i in range(df.shape[0]):
                 ii[i] = pi(x1[i], x2[i])
             df[name] = ii
@@ -576,7 +577,7 @@ def FE2(df, p1, p2, train, ressources_path="", size_ratio=1):
             # )
 
         name = col + "_pi2"  # pi2 = partial intersection, end of string
-        if name not in f_skip1:  # skip to save time
+        if name not in to_skip:  # skip to save time
             # for i in range(df.shape[0]):
             #     ii[i] = pi2(x1[i], x2[i])
             # df[name] = ii
@@ -586,13 +587,13 @@ def FE2(df, p1, p2, train, ressources_path="", size_ratio=1):
             )
 
         name = col + "_ld"  # ld = Levenshtein.distance
-        if name not in f_skip1:  # skip to save time
+        if name not in to_skip:  # skip to save time
             for i in range(df.shape[0]):
                 ii[i] = Levenshtein.distance(x1[i], x2[i])
             df[name] = ii
 
         name = col + "_ljw"  # ljw = Levenshtein.jaro_winkler (float)
-        if name not in f_skip1:  # skip to save time
+        if name not in to_skip:  # skip to save time
             for i in range(df.shape[0]):
                 fi[i] = Levenshtein.jaro_winkler(x1[i], x2[i])
 
@@ -608,7 +609,8 @@ def FE2(df, p1, p2, train, ressources_path="", size_ratio=1):
             lambda x: difflib.SequenceMatcher(None, x[0], x[1]).ratio(), axis=1
         )
 
-        df[col + "_dsm1"] = np.round(fi, num_digits).astype(np.float32)
+        if col + "_dsm1" not in to_skip:
+            df[col + "_dsm1"] = np.round(fi, num_digits).astype(np.float32)
 
         # ll1 - min length of this column
         ll1 = np.maximum(1, np.minimum(p1[col].apply(len), p2[col].apply(len))).astype(
@@ -621,52 +623,62 @@ def FE2(df, p1, p2, train, ressources_path="", size_ratio=1):
 
         # compound features (ratios) ****************
         # pi1 / ll1 = r1
-        df[col + "_pi1_r1"] = np.round((df[col + "_pi1"] / ll1), num_digits2).astype(
-            "float32"
-        )
+        if col + "_pi1_r1" not in to_skip:
+            df[col + "_pi1_r1"] = np.round((df[col + "_pi1"] / ll1), num_digits2).astype(
+                "float32"
+            )
 
         # pi2 / ll1 = r1
-        df[col + "_pi2_r1"] = np.round((df[col + "_pi2"] / ll1), num_digits2).astype(
-            "float32"
-        )
+        if col + "_pi2_r1" not in to_skip:
+            df[col + "_pi2_r1"] = np.round((df[col + "_pi2"] / ll1), num_digits2).astype(
+                "float32"
+            )
 
         # lcs2 / ll1 = r1
-        df[col + "_lcs2_r1"] = np.round((df[col + "_lcs2"] / ll1), num_digits2).astype(
-            "float32"
-        )
+        if col + "_lcs2_r1" not in to_skip:
+            df[col + "_lcs2_r1"] = np.round((df[col + "_lcs2"] / ll1), num_digits2).astype(
+                "float32"
+            )
 
         # lcs2 / ll2 = r2
-        df[col + "_lcs2_r2"] = np.round((df[col + "_lcs2"] / ll2), num_digits2).astype(
-            "float32"
-        )
+        if col + "_lcs2_r2" not in to_skip:
+            df[col + "_lcs2_r2"] = np.round((df[col + "_lcs2"] / ll2), num_digits2).astype(
+                "float32"
+            )
 
         # lcs / ll1 = r1
-        df[col + "_lcs_r1"] = np.round((df[col + "_lcs"] / ll1), num_digits2).astype(
-            "float32"
-        )
+        if col + "_lcs_r1" not in to_skip:
+            df[col + "_lcs_r1"] = np.round((df[col + "_lcs"] / ll1), num_digits2).astype(
+                "float32"
+            )
 
         # lcs / ll2 = r2
-        df[col + "_lcs_r2"] = np.round((df[col + "_lcs"] / ll2), num_digits2).astype(
-            "float32"
-        )
+        if col + "_lcs_r2" not in to_skip:
+            df[col + "_lcs_r2"] = np.round((df[col + "_lcs"] / ll2), num_digits2).astype(
+                "float32"
+            )
 
         # lllcs / ll1 = r1
-        df[col + "_lllcs_r1"] = np.round(
-            (df[col + "_lllcs"] / ll1), num_digits2
-        ).astype("float32")
+        if col + "_lllcs_r1" not in to_skip:
+            df[col + "_lllcs_r1"] = np.round(
+                (df[col + "_lllcs"] / ll1), num_digits2
+            ).astype("float32")
 
         # lllcs / ll2 = r2
-        df[col + "_lllcs_r2"] = np.round(
-            (df[col + "_lllcs"] / ll2), num_digits2
-        ).astype("float32")
+        if col + "_lllcs_r2" not in to_skip:
+            df[col + "_lllcs_r2"] = np.round(
+                (df[col + "_lllcs"] / ll2), num_digits2
+            ).astype("float32")
 
         # ll1 / ll2 = r3
-        df[col + "_r3"] = np.round(ll1 / ll2, num_digits2).astype("float32")
+        if col + "_r3" not in to_skip:
+            df[col + "_r3"] = np.round(ll1 / ll2, num_digits2).astype("float32")
 
         # lcs2 / lcs = r4
-        df[col + "_lcs_r4"] = np.round(
-            (df[col + "_lcs2"] / np.maximum(1, df[col + "_lcs"])), num_digits2
-        ).astype("float32")
+        if col + "_lcs_r4" not in to_skip:
+            df[col + "_lcs_r4"] = np.round(
+                (df[col + "_lcs2"] / np.maximum(1, df[col + "_lcs"])), num_digits2
+            ).astype("float32")
 
         # count of NAs
         df[col + "_NA"] = (

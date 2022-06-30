@@ -41,17 +41,17 @@ def feature_engineering_1(p1, p2, train, ressources_path="", size_ratio=1):
 
 def feature_engineering_2(df_p, train, ressources_path="", size_ratio=1):
     # Vincent & Youri
-    p1 = df_p[["id_1"]].copy()
-    p1.columns = ["id"]
-    p2 = df_p[["id_2"]].copy()
-    p2.columns = ["id"]
-
     df_p = df_p.merge(train[["id", "Nb_multiPoi"]], left_on="id_1", right_on="id").drop(
         "id", axis=1
     )
     df_p = df_p.merge(
         train[["id", "Nb_multiPoi"]], left_on="id_2", right_on="id", suffixes=("_1", "_2")
     ).drop("id", axis=1)
+
+    p1 = df_p[["id_1"]].copy()
+    p1.columns = ["id"]
+    p2 = df_p[["id_2"]].copy()
+    p2.columns = ["id"]
 
     df = FE2(df_p.copy(), p1, p2, train, ressources_path, size_ratio=size_ratio)
 

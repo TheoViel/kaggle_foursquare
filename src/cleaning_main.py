@@ -1,5 +1,6 @@
 import gc
 import random
+import pickle
 import warnings
 import numpy as np
 import pandas as pd
@@ -7,14 +8,50 @@ from tqdm.auto import tqdm
 from unidecode import unidecode
 
 from params import DATA_PATH, OUT_PATH, RESSOURCES_PATH, IS_TEST
-from ressources import *
-from cleaning import *
+from ressources import (
+    NAME_DI,
+    CITY_DI,
+    CITY_DI_2,
+    LL1,
+    ALL_WORDS,
+    CAT2_DI,
+    CAT_REGROUP,
+    COUNTRIES,
+    ID_DI,
+    L1S_ID
+)
+
+from cleaning import (
+    isEnglish,
+    convert_japanese_alphabet,
+    find_cat,
+    replace_seven_eleven,
+    replace_seaworld,
+    replace_mcdonald,
+    simplify_cat,
+    st,
+    apply_solo_cat_score,
+    apply_cat_distscore,
+    rem_expr,
+    rem_abr,
+    get_caps_leading,
+    rem_words,
+    clean_nums,
+    clean_address,
+    st2,
+    process_phone,
+    id_translate,
+    replace_common_words,
+)
 
 random.seed(13)
 warnings.simplefilter("ignore")
 
 
-# In[ ]:
+# ## Load Data
+
+# In[17]:
+
 
 if IS_TEST:
     train = pd.read_csv(DATA_PATH + "test.csv")
@@ -22,19 +59,27 @@ if IS_TEST:
 else:
     train = pd.read_csv(DATA_PATH + "train.csv")
 
+
 # ## Cleaning & processing
 
 # ### Language
 
-# In[ ]:
+# In[18]:
 
 
 train["lang"] = train["name"].apply(isEnglish).astype("int8")
 
 
+# In[19]:
+
+
+idx_JP = train[train["country"] == "JP"].index
+train.loc[idx_JP] = convert_japanese_alphabet(train.loc[idx_JP])
+
+
 # ### Fill-in missing categories, based on words in name
 
-# In[ ]:
+# In[20]:
 
 
 Key_words_for_cat = pd.read_pickle(RESSOURCES_PATH + "dict_for_missing_cat.pkl")
@@ -46,13 +91,13 @@ train.loc[idx_missing_cat, "categories"] = (
     .fillna("")
     .apply(lambda x: find_cat(x, Key_words_for_cat))
 )
-del Key_words_for_cat, idx_missing_cat
+del idx_missing_cat
 gc.collect()
 
 
 # ### Pre-format data
 
-# In[ ]:
+# In[21]:
 
 
 train["point_of_interest"] = (
@@ -62,9 +107,9 @@ train["latitude"] = train["latitude"].astype("float32")
 train["longitude"] = train["longitude"].astype("float32")
 
 
-# ### Sorted by count in candidate training data 
+# ### Sorted by count in candidate training data
 
-# In[ ]:
+# In[22]:
 
 
 c_di = {}
@@ -79,7 +124,7 @@ train["country"] = (
 
 # ### GT
 
-# In[ ]:
+# In[23]:
 
 
 train = train.reset_index()
@@ -106,7 +151,7 @@ train.drop("index", axis=1, inplace=True)
 
 # ### Copy
 
-# In[ ]:
+# In[24]:
 
 
 train["name_svg"] = train["name"].copy()
@@ -115,7 +160,7 @@ train["categories_svg"] = train["categories"].copy()
 
 # ### Clean name
 
-# In[ ]:
+# In[25]:
 
 
 train["name"] = train["name"].apply(lambda x: unidecode(str(x).lower()))
@@ -126,7 +171,7 @@ train["name"] = train["name"].apply(lambda text: replace_mcdonald(text))
 
 # ### Simple category
 
-# In[ ]:
+# In[26]:
 
 
 train["category_simpl"] = (
@@ -141,9 +186,9 @@ print(
 )
 
 
-# ### Go back to initial columns 
+# ### Go back to initial columns
 
-# In[ ]:
+# In[27]:
 
 
 train["name"] = train["name_svg"].copy()
@@ -153,7 +198,7 @@ train.drop(["name_svg", "categories_svg"], axis=1, inplace=True)
 
 # ### Save names separated by spaces for tf-idf
 
-# In[ ]:
+# In[28]:
 
 
 train["categories_split"] = (
@@ -170,7 +215,7 @@ train["name_initial_decode"] = (
 
 # ### Find the score of the categories
 
-# In[ ]:
+# In[29]:
 
 
 cat_pairings = pd.read_pickle(
@@ -183,7 +228,7 @@ train["freq_pairing_with_other_groupedcat"] = (
 )
 
 
-# In[ ]:
+# In[30]:
 
 
 solo_cat_scores = pd.read_pickle(
@@ -197,7 +242,7 @@ train["cat_solo_score"] = (
 )
 
 
-# In[ ]:
+# In[31]:
 
 
 # Find the scores
@@ -227,7 +272,7 @@ for col in [
 
 # ### Clean name
 
-# In[ ]:
+# In[32]:
 
 
 # remove some expressions from name
@@ -243,7 +288,7 @@ train["nameC"] = train["name"].fillna("").apply(get_caps_leading)
 # ### More cleaning
 # - A bit slow
 
-# In[ ]:
+# In[33]:
 
 
 for col in tqdm(["name", "address", "city", "state", "zip", "url", "categories"]):
@@ -269,7 +314,7 @@ train["name2"] = train["name"].str[:7]
 
 # ### Clean Name again
 
-# In[ ]:
+# In[34]:
 
 
 # fix some misspellings
@@ -290,7 +335,7 @@ print(
 )
 train["name"] = train["name_grouped"].copy()
 train = train.drop(columns=["name_grouped"])
-del name_groups, trans
+del name_groups
 gc.collect()
 
 # cap length at 76
@@ -308,9 +353,9 @@ idx = train["name"].str[:3] == "the"  # happens 17,712 times = 1.5%
 train["name"].loc[idx] = train["name"].loc[idx].str[3:]
 
 
-# ### Clean city
+# ### Replace some cities
 
-# In[ ]:
+# In[35]:
 
 
 for key in CITY_DI.keys():
@@ -320,17 +365,47 @@ for key in CITY_DI.keys():
 for key in CITY_DI_2.keys():
     train["city"].loc[train["city"] == key] = CITY_DI_2[key]
 
+
+# ### Group cities & state
+
+# In[36]:
+
+
+# City group
+with open(RESSOURCES_PATH + "dict_for_city_groups.pkl", "rb") as f:
+    dict_for_city_groups = pickle.load(f)
+
+train["city_group"] = train["city"].apply(
+    lambda city: dict_for_city_groups.get(city, city)
+)
+
+# State group
+with open(RESSOURCES_PATH + "dict_for_state_groups.pkl", "rb") as f:
+    dict_for_state_groups = pickle.load(f)
+
+train["state_group"] = train["state"].apply(
+    lambda state: dict_for_state_groups.get(state, state)
+)
+
+
+# ### Clean city
+
+# In[37]:
+
+
 # cap length at 38
 train["city"] = train["city"].str[:38]
+
 # eliminate some common words that do not change meaning
 for w in ["gorod"]:
     train["city"] = train["city"].apply(lambda x: x.replace(w, ""))
+
 train["city"].loc[train["city"] == "nan"] = ""
 
 
 # ### Clean address
 
-# In[ ]:
+# In[38]:
 
 
 train["address"].loc[train["address"] == "nan"] = ""
@@ -340,7 +415,7 @@ train["address"] = train["address"].apply(lambda x: x.replace("street", "str"))
 
 # ### Clean state
 
-# In[ ]:
+# In[39]:
 
 
 train["state"] = train["state"].str[:33]  # cap length at 33
@@ -357,7 +432,7 @@ train["state"].loc[train["state"] == "nan"] = ""
 
 # ### Clean url
 
-# In[ ]:
+# In[40]:
 
 
 train["url"] = train["url"].str[:129]  # cap length at 129
@@ -375,7 +450,7 @@ train["url"].loc[train["url"] == "nan"] = ""
 
 # ### Clean phone
 
-# In[ ]:
+# In[41]:
 
 
 train["phone"] = train["phone"].apply(lambda text: process_phone(text))
@@ -388,7 +463,7 @@ train["phone"].loc[idx] = ""
 
 # ### Clean categories
 
-# In[ ]:
+# In[42]:
 
 
 train["categories"] = train["categories"].str[:68]  # cap length at 68
@@ -402,7 +477,7 @@ for key in cat_di.keys():
 
 # ### Translation
 
-# In[ ]:
+# In[43]:
 
 
 # Translate Indonesian
@@ -412,26 +487,26 @@ for col in ["name", "address", "city", "state"]:
     train[col].loc[idx] = train[col].loc[idx].apply(lambda x: id_translate(x, ID_DI))
 
 
-# In[ ]:
+# In[44]:
 
 
-# translate russian words
-dict_ru_en = pd.read_pickle(RESSOURCES_PATH + "dict_translate_russian.pkl")
+# # translate russian words
+# dict_ru_en = pd.read_pickle(RESSOURCES_PATH + "dict_translate_russian.pkl")
 
-idx = train["country"] == 6  # RU
-for k in ["city", "state", "address", "name"]:
-    train.loc[idx, k] = (
-        train.loc[idx, k]
-        .astype(str)
-        .apply(lambda x: translate_russian_word_by_word(x, dict_ru_en))
-    )
-    train.loc[idx, k] = train.loc[idx, k].apply(lambda x: "" if x == "nan" else x)
-del dict_ru_en
+# idx = train["country"] == 6  # RU
+# for k in ["city", "state", "address", "name"]:
+#     train.loc[idx, k] = (
+#         train.loc[idx, k]
+#         .astype(str)
+#         .apply(lambda x: translate_russian_word_by_word(x, dict_ru_en))
+#     )
+#     train.loc[idx, k] = train.loc[idx, k].apply(lambda x: "" if x == "nan" else x)
+# del dict_ru_en
 
 
 # ### Replacing words
 
-# In[ ]:
+# In[45]:
 
 
 # match some identical names - based on analysis of mismatched names for true pairs
@@ -445,14 +520,14 @@ for l1 in L1S_ID:
     )
 
 
-# In[ ]:
+# In[46]:
 
 
 for l1 in LL1:
     train["name"] = train["name"].apply(lambda x: x if x not in l1[1:] else l1[0])
 
 
-# In[ ]:
+# In[47]:
 
 
 train["name"] = train["name"].apply(replace_common_words)
@@ -460,11 +535,12 @@ train["name"] = train["name"].apply(replace_common_words)
 
 # ### Cat 2
 
-# In[ ]:
+# In[48]:
 
 
 # define cat2 (clean category with low cardinality)
-# base it on address, name and catogories - after those have been cleaned (then do not need to include misspellings)
+# base it on address, name and catogories - after those have been cleaned
+# (then do not need to include misspellings)
 train["cat2"] = ""  # init (left: 129824*)
 
 for col in ["address", "categories", "name"]:
@@ -478,7 +554,7 @@ train["cat2"] = train["cat2"].map(CAT2_DI).astype("int16")
 
 # ### Nans
 
-# In[ ]:
+# In[49]:
 
 
 for c in [
@@ -497,6 +573,8 @@ for c in [
     "name_initial_decode",
     "nameC",
     "name2",
+    "city_group",
+    "state_group",
 ]:
     train.loc[train[c] == "null", c] = ""
     train.loc[train[c] == "nan", c] = ""
@@ -504,11 +582,12 @@ for c in [
 
 # ## Save
 
-# In[ ]:
+# In[50]:
+
 
 if IS_TEST:
     train.to_csv(OUT_PATH + "cleaned_data_test.csv", index=False)
 else:
     train.to_csv(OUT_PATH + "cleaned_data_train.csv", index=False)
 
-print('Done !')
+print("Done !")

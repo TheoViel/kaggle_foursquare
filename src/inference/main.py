@@ -1,4 +1,5 @@
 import json
+import glob
 import numpy as np
 import pandas as pd
 from cuml import ForestInference
@@ -62,3 +63,35 @@ def k_fold_inf(
     print(f"\n -> CV AUC = {roc_auc_score(df[config.target], pred_oof) :.4f}\n")
 
     return pred_oof
+
+
+def k_fold_inf_test(
+    df,
+    log_folder,
+):
+    config = Config(json.load(open(log_folder + "config.json", "r")))
+    pred_test = np.zeros(len(df))
+
+    if config.model == "lgbm":
+        weights = sorted(glob.glob(log_folder + "lgbm_*.txt"))
+    elif config.model == "xgb":
+        weights = sorted(glob.glob(log_folder + "xgb_*.json"))
+
+    for fold, weight in enumerate(weights):
+        if fold in config.selected_folds:
+            print(f"\n-------------   Weights {weight}  -------------\n")
+
+            if config.model == "lgbm":
+                model = ForestInference.load(weight, model_type="lightgbm")
+                pred = model.predict(df[config.features]).flatten()
+
+            elif config.model == "xgb":
+                model = ForestInference.load(weight, output_class=True, model_type="xgboost_json")
+
+                pred = model.predict_proba(df[config.features])[:, 1]
+            else:
+                raise NotImplementedError
+
+            pred_test += pred / len(weights)
+
+    return pred_test
