@@ -6,9 +6,9 @@ from sklearn.metrics import roc_auc_score
 
 def objective_xgb(trial, df_train, df_val, features, target="match"):
     xgb_params = dict(
-        max_depth=trial.suggest_int("max_depth", 5, 15),
-        gamma=trial.suggest_float("gamma", 1e-6, 1e-1, log=True),
-        min_child_weight=trial.suggest_int("min_child_weight", 1, 10),
+        max_depth=trial.suggest_int("max_depth", 8, 12),
+        # gamma=trial.suggest_float("gamma", 1e-6, 1e-1, log=True),
+        min_child_weight=trial.suggest_int("min_child_weight", 1, 30),
         colsample_bytree=trial.suggest_float("colsample_bytree", 0.5, 1),
         subsample=trial.suggest_float("subsample", 0.5, 1),
         reg_alpha=trial.suggest_float("reg_alpha", 1e-3, 1, log=True),
@@ -24,6 +24,8 @@ def objective_xgb(trial, df_train, df_val, features, target="match"):
         tree_method="gpu_hist",
         predictor="gpu_predictor",
         use_label_encoder=False,
+        random_state=42,
+        enable_categorical=True,
     )
 
     model.fit(
@@ -66,6 +68,7 @@ def train_xgb(
         predictor="gpu_predictor",
         use_label_encoder=False,
         random_state=42 + i,
+        enable_categorical=True,
     )
 
     es = callback.EarlyStopping(

@@ -144,11 +144,14 @@ def is_equal(a, b):
 
 
 def tf_idf_similarity(pairs, matrix):
-    i1s = pairs["idx_1"].values.tolist()
-    i2s = pairs["idx_2"].values.tolist()
+    i1s = pairs["idx_1"].values.astype(int).tolist()
+    i2s = pairs["idx_2"].values.astype(int).tolist()
+    sims = matrix[i1s].multiply(matrix[i2s]).sum(1)
 
-    sims = matrix[i1s].multiply(matrix[i2s]).sum(axis=1).ravel()
-    return sims.get()
+    try:
+        return sims.get()
+    except AttributeError:
+        return sims
 
 
 def compute_nn_distances(df, matrix, suffix=""):

@@ -1,4 +1,5 @@
 import re
+import pykakasi
 import numpy as np
 from unidecode import unidecode
 
@@ -23,6 +24,25 @@ def isEnglish(s):
             return 2  # spanish/french?
     else:
         return 1  # english
+
+
+def convert_japanese_alphabet(df):
+    kakasi = pykakasi.kakasi()
+    kakasi.setMode('H', 'a')  # Convert Hiragana into alphabet
+    kakasi.setMode('K', 'a')  # Convert Katakana into alphabet
+    kakasi.setMode('J', 'a')  # Convert Kanji into alphabet
+    conversion = kakasi.getConverter()
+
+    def convert(row):
+        for column in ["name", "address", "city", "state"]:
+            try:
+                row[column] = conversion.do(row[column])
+            except Exception:
+                pass
+        return row
+
+    df = df.apply(convert, axis=1)
+    return df
 
 
 def process(cat, split=" "):

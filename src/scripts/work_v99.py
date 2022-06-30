@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import lightgbm as lgb
-from sklearn.model_selection import StratifiedKFold, GroupKFold
+from sklearn.model_selection import StratifiedKFold, GroupKFold, KFold
 import warnings
 import Levenshtein
 import difflib
@@ -22,20 +22,6 @@ random.seed(13)
 
 # read data
 train = pd.read_pickle('input/train.pkl')
-
-
-# test -separate 20% of data into "Test", exclude it from training**************************************
-##kf = GroupKFold(n_splits=5)
-##for train_index, test_index in kf.split(train, train['id'], train['point_of_interest']):
-##    train_test = train.loc[test_index].reset_index(drop=True)
-##    train_test.to_pickle('train_test.pkl')
-##    train = train.loc[train_index].reset_index(drop=True)
-##    del train_test, train_index, test_index, kf
-##    gc.collect()
-##    break
-# end of test *********************************************************************************************
-
-
 
 train['id'] = train['id'].astype('category').cat.codes # turn id into ints to save spacetime - for train only!!!
 print('finished reading data', int(time.time() - start_time), 'sec')
@@ -1995,12 +1981,129 @@ a = p1.groupby('id')['y'].sum().reset_index()
 print('count of all matching pairs is:', np.minimum(1,a['y']).sum()) 
 
 
+
+# get CV*******************************************************************************************************************************
+def cci(x, y):# count y in x (intersection)
+    i = 0
+    for j in range(1000):
+        l1 = y.find(' ')
+        if y[:l1+1] in x: # include space in search to avoid false positives (need to have trailing space in m_true)
+            i += 1
+        y = y[l1+1:]
+        if ' ' not in y: # only 1 item left
+            break
+    return i
+
+def get_CV(p1, p2, y, oof_preds, all_cuts = 1):
+    cv0 = 0
+    cut0 = 0
+    # first, construct composite dataframe
+    df2 = p1[['id']]
+    df2['id2'] = p2['id']
+    df2['y'] = y
+    df2['match'] = oof_preds.astype('float32')
+    df2 = df2.merge(train[['id', 'm_true']], on='id', how='left') # bring in m_true
+    cut2 = 0.8 # hardcode for now
+    ll = [0, .4, .45, .5, .55, .6, .65]
+    if all_cuts == 0:
+        ll = [0]
+    for cut1 in ll:
+        # select matching pairs
+        cut = cut1
+        if cut1 == 0: # true match, for max cv assessment only - this is CV if lgb model predicts a perfect answer
+            matches = df2[['id', 'id2', 'match', 'y']].loc[df2['y']==1].reset_index(drop=True)
+            matches['match'] = matches['y']
+        else:
+            matches = df2[['id', 'id2', 'match']].loc[df2['match']>cut].reset_index(drop=True) # call it a match if p > cut
+
+        # construct POI from pairs
+        poi_di = {} # maps each id to POI
+        poi = 0
+        id1, id2, preds = matches['id'].to_numpy(), matches['id2'].to_numpy(), matches['match'].to_numpy()
+        for i in range(matches.shape[0]):
+            i1 = id1[i]
+            i2 = id2[i]
+            if i1 in poi_di: # i1 is already in dict - assign i2 to the same poi
+               poi_di[i2] = poi_di[i1]
+            else:
+                if i2 in poi_di: # i2 is already in dict - assign i1 to the same poi
+                   poi_di[i1] =  poi_di[i2]
+                else: # new poi, assign it to both
+                    poi_di[i1] = poi
+                    poi_di[i2] = poi
+                    poi += 1
+        
+        # check for split groups and merge them
+        for k in range(20):
+            j = 0
+            for i in range(matches.shape[0]):
+                i1 = id1[i]
+                i2 = id2[i]
+                pred = preds[i]
+                if poi_di[i2] != poi_di[i1] and pred > cut2: # 2 different groups - put them all in lower one
+                    m = min(poi_di[i2], poi_di[i1])
+                    poi_di[i1] = m
+                    poi_di[i2] = m
+                    j += 1
+            if j == 0:
+                break
+        
+        # construct list of id/poi pairs
+        m2 = pd.DataFrame(matches['id'].append(matches['id2'], ignore_index=True))
+        m2 = m2.drop_duplicates()
+        m2['poi'] = m2[0].map(poi_di)
+
+        # predicted true groups
+        m2     = m2.sort_values(by=['poi', 0]).reset_index(drop=True)
+        ids, pois = m2[0].to_numpy(), m2['poi'].to_numpy()
+        poi0   = pois[0]
+        id0    = ids[0]
+        di_poi = {} # this maps POI to list of all ids that belong to it
+        for i in range(1, m2.shape[0]):
+            if pois[i] == poi0: # this id belongs to the same POI as prev id - add it to the list
+                id0 = str(id0) + ' ' + str(ids[i]) # id0 is list of all ids that belong to current POI
+            else:
+                di_poi[poi0]    = str(id0) + ' ' # need to have trailing space in m_true
+                poi0            = pois[i]
+                id0             = ids[i]
+        di_poi[poi0] = str(id0) + ' ' # need to have trailing space in m_true
+        m2['m2'] = m2['poi'].map(di_poi) # this is the list of all matches
+        m2.columns = ['id', 'poi', 'm2']
+
+        # bring predictions into final result
+        p1_tr = train[['id', 'm_true']].merge(m2[['id', 'm2']], on='id', how='left')
+        p1_tr['m2'] = p1_tr['m2'].fillna('missing')
+        idx = p1_tr['m2'] == 'missing'
+        p1_tr['m2'].loc[idx] = p1_tr['id'].astype('str').loc[idx] + ' ' # fill missing values with id - those correspond to 1 id per poi
+
+        # compare to true groups
+        ii = np.zeros(p1_tr.shape[0], dtype=np.int32)
+        x1, x2 = p1_tr['m_true'].to_numpy(), p1_tr['m2'].to_numpy()
+        for i in range(p1_tr.shape[0]): ii[i] = cci(x1[i], x2[i])
+        p1_tr['intersection'] = ii
+        p1_tr['len_pred'] = p1_tr['m2'].apply(lambda x: x.count(' '))
+        p1_tr['len_true'] = p1_tr['m_true'].apply(lambda x: x.count(' '))
+        p1_tr['union'] = p1_tr['len_true'] + p1_tr['len_pred'] - p1_tr['intersection']
+        cv = (p1_tr['intersection'] / p1_tr['union']).mean()
+        if cv > cv0 or cut0 == 0: # always overwrite 0, that was only a max assessment
+            cv0 = cv
+            cut0 = cut1
+        print(cut1, 'CV***', np.round(cv, 4), int(time.time() - start_time), 'sec')
+    print('best cut is', cut0, 'best CV is', np.round(cv0, 4), '*************************************************************************')
+    return cut0, cv0
+
+
+# shuffle p1/p2
+idx = np.random.permutation(p1.index)
+p2 = p2.loc[idx].reset_index(drop=True)
+p1 = p1.loc[idx].reset_index(drop=True)
+y = np.array(p1['point_of_interest'] == p2['point_of_interest']).astype(np.int8)
+del idx
+
 # add other columns - needed for FE
 cols = ['id', 'name', 'latitude', 'longitude', 'address', 'country', 'url', 'phone', 'city', 'categories', 'category_simpl', 'categories_split', 'cat2']
 p1 = p1[['id']].merge(train[cols], on='id', how='left')
 p2 = p2[['id']].merge(train[cols], on='id', how='left')
-
-
 
 # check for flipped sign on longitude - this may help test data a lot; test it? Move this code up to apply to "train"
 dist = distance(np.array(p1['latitude']), np.array(p1['longitude']), np.array(p2['latitude']), np.array(p2['longitude']))
@@ -2015,8 +2118,6 @@ print('flipped sign of longitude for', idx.sum(), 'points')
 p1['longitude'].loc[idx] *= -1 # flip(correct) sign
 del df, idx, dist, a
 gc.collect()
-
-
 
 
 # FE1***************************************************************************************************************************************
@@ -2154,115 +2255,6 @@ types = df.dtypes
 df = np.array(df, dtype=np.float32) # turn into np array to avoid memory spike
 
 
-# get CV*******************************************************************************************************************************
-def cci(x, y):# count y in x (intersection)
-    i = 0
-    for j in range(1000):
-        l1 = y.find(' ')
-        if y[:l1+1] in x: # include space in search to avoid false positives (need to have trailing space in m_true)
-            i += 1
-        y = y[l1+1:]
-        if ' ' not in y: # only 1 item left
-            break
-    return i
-
-def get_CV(p1, p2, y, oof_preds):
-    cv0 = 0
-    cut0 = 0
-    # first, construct composite dataframe
-    df2 = p1[['id']]
-    df2['id2'] = p2['id']
-    df2['y'] = y
-    df2['match'] = oof_preds.astype('float32')
-    df2 = df2.merge(train[['id', 'm_true']], on='id', how='left') # bring in m_true
-    cut2 = 0.8 # hardcode for now
-    for cut1 in [0, .4, .45, .5, .55, .6, .65]:
-        # select matching pairs
-        cut = cut1
-        if cut1 == 0: # true match, for max cv assessment only - this is CV if lgb model predicts a perfect answer
-            matches = df2[['id', 'id2', 'match']].loc[df2['y']==1].reset_index(drop=True)
-        else:
-            matches = df2[['id', 'id2', 'match']].loc[df2['match']>cut].reset_index(drop=True) # call it a match if p > cut
-
-        # construct POI from pairs
-        poi_di = {} # maps each id to POI
-        poi = 0
-        id1, id2, preds = matches['id'].to_numpy(), matches['id2'].to_numpy(), matches['match'].to_numpy()
-        for i in range(matches.shape[0]):
-            i1 = id1[i]
-            i2 = id2[i]
-            if i1 in poi_di: # i1 is already in dict - assign i2 to the same poi
-               poi_di[i2] = poi_di[i1]
-            else:
-                if i2 in poi_di: # i2 is already in dict - assign i1 to the same poi
-                   poi_di[i1] =  poi_di[i2]
-                else: # new poi, assign it to both
-                    poi_di[i1] = poi
-                    poi_di[i2] = poi
-                    poi += 1
-        
-        # check for split groups and merge them
-        for k in range(20):
-            j = 0
-            for i in range(matches.shape[0]):
-                i1 = id1[i]
-                i2 = id2[i]
-                pred = preds[i]
-                if poi_di[i2] != poi_di[i1] and pred > cut2: # 2 different groups - put them all in lower one
-                    m = min(poi_di[i2], poi_di[i1])
-                    poi_di[i1] = m
-                    poi_di[i2] = m
-                    j += 1
-            if j == 0:
-                break
-        
-        # construct list of id/poi pairs
-        m2 = pd.DataFrame(matches['id'].append(matches['id2'], ignore_index=True))
-        m2 = m2.drop_duplicates()
-        m2['poi'] = m2[0].map(poi_di)
-
-        # predicted true groups
-        m2     = m2.sort_values(by=['poi', 0]).reset_index(drop=True)
-        ids, pois = m2[0].to_numpy(), m2['poi'].to_numpy()
-        poi0   = pois[0]
-        id0    = ids[0]
-        di_poi = {} # this maps POI to list of all ids that belong to it
-        for i in range(1, m2.shape[0]):
-            if pois[i] == poi0: # this id belongs to the same POI as prev id - add it to the list
-                id0 = str(id0) + ' ' + str(ids[i]) # id0 is list of all ids that belong to current POI
-            else:
-                di_poi[poi0]    = str(id0) + ' ' # need to have trailing space in m_true
-                poi0            = pois[i]
-                id0             = ids[i]
-        di_poi[poi0] = str(id0) + ' ' # need to have trailing space in m_true
-        m2['m2'] = m2['poi'].map(di_poi) # this is the list of all matches
-        m2.columns = ['id', 'poi', 'm2']
-
-        # bring predictions into final result
-        p1_tr = train[['id', 'm_true']].merge(m2[['id', 'm2']], on='id', how='left')
-        p1_tr['m2'] = p1_tr['m2'].fillna('missing')
-        idx = p1_tr['m2'] == 'missing'
-        p1_tr['m2'].loc[idx] = p1_tr['id'].astype('str').loc[idx] + ' ' # fill missing values with id - those correspond to 1 id per poi
-
-        # compare to true groups
-        ii = np.zeros(p1_tr.shape[0], dtype=np.int32)
-        x1, x2 = p1_tr['m_true'].to_numpy(), p1_tr['m2'].to_numpy()
-        for i in range(p1_tr.shape[0]): ii[i] = cci(x1[i], x2[i])
-        p1_tr['intersection'] = ii
-        p1_tr['len_pred'] = p1_tr['m2'].apply(lambda x: x.count(' '))
-        p1_tr['len_true'] = p1_tr['m_true'].apply(lambda x: x.count(' '))
-        p1_tr['union'] = p1_tr['len_true'] + p1_tr['len_pred'] - p1_tr['intersection']
-        cv = (p1_tr['intersection'] / p1_tr['union']).mean()
-        if cv > cv0 or cut0 == 0: # always overwrite 0, that was only a max assessment
-            cv0 = cv
-            cut0 = cut1
-        print(cut1, 'CV***', np.round(cv, 4), int(time.time() - start_time), 'sec')
-    print('best cut is', cut0, 'best CV is', np.round(cv0, 4), '*************************************************************************')
-    return cut0, cv0
-
-
-
-
 # print size of large vars
 for i in dir():
     ss = sys.getsizeof(eval(i))
@@ -2273,9 +2265,13 @@ for i in dir():
 print('data size is', df.shape)
 folds = 5 # number of folds
 oof_preds = np.zeros(df.shape[0], dtype=np.float32)
-kf = StratifiedKFold(n_splits=folds) 
+#kf = KFold(n_splits=folds, shuffle=False)#, random_state=13)
+#kf = GroupKFold(n_splits=folds)
+kf = StratifiedKFold(n_splits=folds)
 fi = np.zeros(df.shape[1])
-for fold, (train_idx, valid_idx) in enumerate(kf.split(df, y+2*np.minimum(15,df[:,6])+2*100*np.minimum(11,df[:,3]))):
+#g = np.array(p1[['id']].merge(train[['id','point_of_interest']], on='id', how='left')['point_of_interest'])
+for fold, (train_idx, valid_idx) in enumerate(kf.split(df, y)):
+#for fold, (train_idx, valid_idx) in enumerate(kf.split(df, y+2*np.minimum(15,df[:,6])+2*100*np.minimum(11,df[:,3]))):
     x_train, x_valid = df[train_idx], df[valid_idx]
     y_train, y_valid = y[train_idx], y[valid_idx]
     lgb_train = lgb.Dataset(x_train, y_train, categorical_feature=[3, 4, 5]) # country, cat2a, cat2b
@@ -2307,27 +2303,26 @@ y0 = df2['y'].sum()
 a0 = np.minimum(1,df2.groupby('id')['y'].sum()).sum()
 for cut in [-.1, .001, .002,  .003, .005, .007, .01, .02, .05]:
     a = df2.loc[df2['p']>cut].groupby('id')['y'].sum().reset_index()
-    print('reduce data size:', 
-    cut, 
-    df2.loc[df2['p']>cut].shape[0], 
-    df2['y'].loc[df2['p']>cut].sum(), 
-    y0 - df2['y'].loc[df2['p']>cut].sum(), 
-    np.minimum(1,a['y']).sum(), 
-    a0- np.minimum(1,a['y']).sum()
-)
+    print('reduce data size:', cut, df2.loc[df2['p']>cut].shape[0], df2['y'].loc[df2['p']>cut].sum(), y0 - df2['y'].loc[df2['p']>cut].sum(), np.minimum(1,a['y']).sum(), a0- np.minimum(1,a['y']).sum())
 
 # select subset of data
 idx = oof_preds > .007 # hardcode .007 here - for now.
 p1 = p1.loc[idx].reset_index(drop=True)
 p2 = p2.loc[idx].reset_index(drop=True)
 df = df[idx]
+y  = y[idx]
+
 df = pd.DataFrame(df) # convert back to dataframe
 df.columns = features
 for col in types.index:
     df[col] = df[col].astype(types[col])
-y = y[idx]
 del df2
 gc.collect()
+
+
+
+
+
 
 
 # now that i have a smaller dataset, expand features
@@ -2881,11 +2876,15 @@ cat_cols = []
 for i, col in enumerate(features):
     if types[col]== 'category':
         cat_cols.append(i)
-folds = 5 # number of folds; increase for final submission? To do.
+folds = 10 # number of folds
 oof_preds = np.zeros(df.shape[0], dtype=np.float32)
+#kf = KFold(n_splits=folds, shuffle=False)#, random_state=13)
+#kf = GroupKFold(n_splits=folds)
 kf = StratifiedKFold(n_splits=folds)
 fi = np.zeros(df.shape[1])
-for fold, (train_idx, valid_idx) in enumerate(kf.split(df, y+2*np.minimum(15,df[:,6])+2*100*np.minimum(11,df[:,3]))): # name_pi1, country
+#g = np.array(p1[['id']].merge(train[['id','point_of_interest']], on='id', how='left')['point_of_interest'])
+for fold, (train_idx, valid_idx) in enumerate(kf.split(df, y)):
+#for fold, (train_idx, valid_idx) in enumerate(kf.split(df, y+2*np.minimum(15,df[:,6])+2*100*np.minimum(11,df[:,3]))):
     x_train, x_valid = df[train_idx], df[valid_idx]
     y_train, y_valid = y[train_idx], y[valid_idx]
     lgb_train = lgb.Dataset(x_train, y_train, categorical_feature=cat_cols)
@@ -2964,6 +2963,12 @@ df2.to_csv('preds.csv', index=False)
 # 5 folds on model 1                                            GB=0.55 CV*** 0.9249 177 sec 0.55 CV*** 0.8912 12474 sec LB85=0.927 - second best
 # decrease early stopping(30) (hardcode iter limit lower?)                                   0.55 CV*** 0.8912 12168 sec LB86=0.927 - third best - undo
 # new params(high l2)                                           GB=0.55 CV*** 0.9219 150 sec 0.55 CV*** 0.8915 15169 sec LB89=0.928 - best LB *********************
+# 10 folds                                                      GB=0.55 CV*** 0.9243 185 sec 0.55 CV*** 0.8931 24140 sec cv+1.6 LB91=...
+# not-stratified kfold in lgb3                                  GB=0.55 CV*** 0.9269 209 sec 0.55 CV*** 0.8975 27993 sec cv+4.4 LB97=0.933
+# Kfold 10 folds trim_mean(0.1), fast inference(1%+fold*1%)
+# all Stratified, y only                                        GB=0.55 CV*** 0.9231 180 sec 0.55 CV*** 0.8931 23971 sec - ???
+# shufle, stratified(y)                                         GB=0.50 CV*** 0.9256 194 sec 0.55 CV*** 0.8981 30045 sec LB99=...
+# shufle, all stratified                                        ... 
 
 
 

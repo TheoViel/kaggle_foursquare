@@ -13,9 +13,8 @@ def plot_importances(imps):
 
     importances['importance'] = importances['importance'].apply(np.abs)
     importances = importances.sort_values("importance", ascending=False).reset_index()
-    importances = importances[importances['importance'] != 0]
 
-    plt.figure(figsize=(15, 25))
+    plt.figure(figsize=(15, len(imps) // 5))
     sns.barplot(x='importance', y="index", data=importances)
     plt.yticks(fontsize=11)
     plt.ylabel(None)

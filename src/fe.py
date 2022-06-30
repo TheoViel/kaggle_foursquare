@@ -10,10 +10,10 @@ from numba import jit
 from collections import defaultdict
 
 from matching import distance, lcs, lcs2, pi, cc_lcs, ll_lcs, pi2
-from ressources import dist_by_cat2, dist_by_category_simpl, F_SKIP0, WORDS_C, WORDS_N
+from ressources import dist_by_cat2, dist_by_category_simpl, F_SKIP0, WORDS_C, WORDS_N, CAP_DI
 
 
-def FE1(p1, p2):
+def FE1(p1, p2, size_ratio=1):
     print("- Distances")
     dist = distance(
         np.array(p1["latitude"]),
@@ -50,7 +50,7 @@ def FE1(p1, p2):
     ii = np.zeros(df.shape[0], dtype=np.int16)  # integer placeholder
     num_digits2 = 2  # digits for ratios
     for col in ["name", "categories", "address"]:
-        print("- Processing column :", col)
+        print("- Features for column :", col)
         x1, x2 = p1[col].to_numpy(), p2[col].to_numpy()
 
         # pi1 = partial intersection, start of string
@@ -173,8 +173,8 @@ def FE1(p1, p2):
             p2[[col]], ignore_index=True
         )  # count it in both p1 and p2
         df1 = p12[col].value_counts()
-        p1["cc"] = p1[col].map(df1)
-        p2["cc"] = p2[col].map(df1)
+        p1["cc"] = p1[col].map(df1) * size_ratio
+        p2["cc"] = p2[col].map(df1) * size_ratio
         del p12, df1
         gc.collect()
         # features
@@ -273,7 +273,23 @@ def count_close_cat(lat, lon, lat1, lon1, cat, cat1, cat2):
     return cc
 
 
-def FE2(df, p1, p2, train, ressources_path=""):
+def ratio_of_similar_elements(L1, L2):
+    common = [x for x in L1 if x in L2]
+    a = 2*len(common) - len(L1) - len(L2)
+    nb = len(L1) + len(L2) - len(common)
+    if nb > 0:
+        return a, a / nb
+    else:
+        return 0, 0
+
+
+def find_num_in_string(s):
+    L = re.findall(r"[-+]?[.]?[\d]+(?:,\d\d\d)*[\.]?\d*(?:[eE][-+]?\d+)?", s)
+    L = [''.join([x for x in s if x.isdigit()]) for s in L]
+    return L
+
+
+def FE2(df, p1, p2, train, ressources_path="", size_ratio=1):
     print('- Cat links & quantiles')
     cat_links = pd.read_pickle(
         ressources_path + "link_between_categories.pkl"
@@ -325,7 +341,6 @@ def FE2(df, p1, p2, train, ressources_path=""):
     print('- Simply connected components')
 
     # Create graph
-
     graph = defaultdict(set)
     for id1, id2 in zip(p1["id"], p2["id"]):
         if id1 != id2:
@@ -349,6 +364,18 @@ def FE2(df, p1, p2, train, ressources_path=""):
     df["Nb_connect1"] = p1["id"].apply(lambda idx: Len_connect[idx]).astype("int16")
     df["Nb_connect2"] = p2["id"].apply(lambda idx: Len_connect[idx]).astype("int16")
 
+    # Ratio with Nb_multiPoi
+    eps, MAX = 1e-1, 1e5
+    df["ratio_connect_multipoi1"] = df["Nb_connect1"] / (df["Nb_multiPoi_1"] + eps)
+    df["ratio_connect_multipoi2"] = df["Nb_connect2"] / (df["Nb_multiPoi_2"] + eps)
+
+    df["ratio_connect_multipoi1"] = df["ratio_connect_multipoi1"].apply(
+        lambda x: x if x <= MAX else MAX
+    ).astype('float32')
+    df["ratio_connect_multipoi2"] = df["ratio_connect_multipoi2"].apply(
+        lambda x: x if x <= MAX else MAX
+    ).astype('float32')
+
     del Connexes, connected_components  # , Len_connect
     gc.collect()
 
@@ -368,16 +395,28 @@ def FE2(df, p1, p2, train, ressources_path=""):
         p1["id"].apply(lambda x: Len_strong_connect[x]).astype("int16")
     )
 
+    # Ratio with nb_multiPoi
+    eps, MAX = 1e-1, 1e5
+    df["ratio_strong_connect_multipoi1"] = df["Nb_strong_connect"] / (df["Nb_multiPoi_1"] + eps)
+    df["ratio_strong_connect_multipoi2"] = df["Nb_strong_connect"] / (df["Nb_multiPoi_2"] + eps)
+
+    # Avoid too high values
+    df["ratio_strong_connect_multipoi1"] = df["ratio_strong_connect_multipoi1"].apply(
+        lambda x: x if x <= MAX else MAX
+    ).astype('float32')
+    df["ratio_strong_connect_multipoi2"] = df["ratio_strong_connect_multipoi2"].apply(
+        lambda x: x if x <= MAX else MAX
+    ).astype('float32')
+
     del Connexes, graph  # , Len_strong_connect
     gc.collect()
 
-    ################################
-    # Vincent
+    # Cat link scores
+    print('- Cat link score')
+
     df["cat_link_score"] = cat_links_ratio.copy()
     df["cat_link_score_all"] = cat_links_ratio_all.copy()
 
-    # Cat link scores
-    print('- Cat link score')
     col_cat_distscores = ["Nb_multiPoi", "mean", "q25", "q50", "q75", "q90", "q99"]
 
     for x in ["cat_link_score", "cat_link_score_all"]:
@@ -468,6 +507,7 @@ def FE2(df, p1, p2, train, ressources_path=""):
 
     # list of features to skip due to low fi (<0.00015)
     f_skip1 = set(df.columns)
+
     for col in [
         "name_initial",
         "name_initial_decode",
@@ -481,47 +521,70 @@ def FE2(df, p1, p2, train, ressources_path=""):
         "zip",
         "phone",
     ]:
-        print("- Processing column", col)
+        print("- Features for column", col)
         x1, x2 = p1[col].to_numpy(), p2[col].to_numpy()
+        dfp = pd.concat([p1[[col]], p2[col]], 1)
+        dfp.columns = [col + "_1", col + "_2"]
 
         name = col + "_cclcs"  # cclcs = count of common substrings of length X+
         if name not in f_skip1 and name not in F_SKIP0:  # skip to save time
-            for i in range(df.shape[0]):
-                ii[i] = cc_lcs(x1[i], x2[i], 4)
-            df[name] = ii
+            # for i in range(df.shape[0]):
+            #     ii[i] = cc_lcs(x1[i], x2[i], 4)
+            # df[name] = ii
+            df[name] = dfp[[col + "_1", col + "_2"]].parallel_apply(
+                lambda x: cc_lcs(x[0], x[1], 4), axis=1
+            )
 
         name = col + "_lllcs"  # lllcs = total length of common substrings of length X+
         if name not in f_skip1:  # skip to save time
-            min_len = 5
-            if col == "nameC":
-                min_len = 1
-            for i in range(df.shape[0]):
-                ii[i] = ll_lcs(x1[i], x2[i], min_len)
-            df[name] = ii
+            min_len = 1 if col == "nameC" else 5
+
+            # for i in range(df.shape[0]):
+            #     ii[i] = ll_lcs(x1[i], x2[i], min_len)
+            # df[name] = ii
+
+            df[name] = dfp[[col + "_1", col + "_2"]].parallel_apply(
+                lambda x: ll_lcs(x[0], x[1], min_len), axis=1
+            )
 
         name = col + "_lcs2"  # lcs2 = longest common substring
         if name not in f_skip1:  # skip to save time
-            for i in range(df.shape[0]):
-                ii[i] = lcs2(x1[i], x2[i])
-            df[name] = ii
+            # for i in range(df.shape[0]):
+            #     ii[i] = lcs2(x1[i], x2[i])
+            # df[name] = ii
+
+            df[name] = dfp[[col + "_1", col + "_2"]].parallel_apply(
+                lambda x: lcs2(x[0], x[1]), axis=1
+            )
 
         name = col + "_lcs"  # lcs = longest common subsequence
         if name not in f_skip1:  # skip to save time
-            for i in range(df.shape[0]):
-                ii[i] = lcs(x1[i], x2[i])
-            df[name] = ii
+            # for i in range(df.shape[0]):
+            #     ii[i] = lcs(x1[i], x2[i])
+            # df[name] = ii
+
+            df[name] = dfp[[col + "_1", col + "_2"]].parallel_apply(
+                lambda x: lcs(x[0], x[1]), axis=1
+            )
 
         name = col + "_pi1"  # pi1 = partial intersection, start of string
         if name not in f_skip1:  # skip to save time
             for i in range(df.shape[0]):
                 ii[i] = pi(x1[i], x2[i])
             df[name] = ii
+            # df[name] = dfp[[col + "_1", col + "_2"]].parallel_apply(
+            #     lambda x: pi(x[0], x[1]), axis=1
+            # )
 
         name = col + "_pi2"  # pi2 = partial intersection, end of string
         if name not in f_skip1:  # skip to save time
-            for i in range(df.shape[0]):
-                ii[i] = pi2(x1[i], x2[i])
-            df[name] = ii
+            # for i in range(df.shape[0]):
+            #     ii[i] = pi2(x1[i], x2[i])
+            # df[name] = ii
+
+            df[name] = dfp[[col + "_1", col + "_2"]].parallel_apply(
+                lambda x: pi2(x[0], x[1]), axis=1
+            )
 
         name = col + "_ld"  # ld = Levenshtein.distance
         if name not in f_skip1:  # skip to save time
@@ -533,19 +596,20 @@ def FE2(df, p1, p2, train, ressources_path=""):
         if name not in f_skip1:  # skip to save time
             for i in range(df.shape[0]):
                 fi[i] = Levenshtein.jaro_winkler(x1[i], x2[i])
+
             df[name] = np.round(fi, num_digits).astype(np.float32)  # round
 
         # dsm = difflib.SequenceMatcher (float); not symmetrical, do apply twice!
-        for i in range(df.shape[0]):
-            fi[i] = difflib.SequenceMatcher(None, x1[i], x2[i]).ratio()
-        for i in range(df.shape[0]):
-            fi2[i] = difflib.SequenceMatcher(None, x2[i], x1[i]).ratio()
-        df[col + "_dsm1"] = np.round(np.minimum(fi, fi2), num_digits).astype(
-            np.float32
-        )  # round
-        df[col + "_dsm2"] = np.round(np.maximum(fi, fi2), num_digits).astype(
-            np.float32
-        )  # round
+        # for i in range(df.shape[0]):
+        #     fi[i] = difflib.SequenceMatcher(None, x1[i], x2[i]).ratio()
+        # for i in range(df.shape[0]):
+        #     fi2[i] = difflib.SequenceMatcher(None, x2[i], x1[i]).ratio()
+
+        fi = dfp[[col + "_1", col + "_2"]].parallel_apply(
+            lambda x: difflib.SequenceMatcher(None, x[0], x[1]).ratio(), axis=1
+        )
+
+        df[col + "_dsm1"] = np.round(fi, num_digits).astype(np.float32)
 
         # ll1 - min length of this column
         ll1 = np.maximum(1, np.minimum(p1[col].apply(len), p2[col].apply(len))).astype(
@@ -630,70 +694,18 @@ def FE2(df, p1, p2, train, ressources_path=""):
             & (p1[col] != "nan")
             & (p2[col] != "nan")
         ).astype("int8")
+
+        # break
+
     # drop skipped columns
     df.drop(list(F_SKIP0.intersection(df.columns)), axis=1, inplace=True)
     del x1, x2, fi, fi2, ll1, ll2
     gc.collect()
 
     # cap features - after ratios. To reduce overfitting (cap determined to impact <0.1% of cases)
-    cap_di = {
-        "address_cclcs": 5,
-        "address_lcs": 95,
-        "address_lcs2": 94,
-        "address_ld": 69,
-        "address_ll1": 100,
-        "address_lllcs": 94,
-        "address_pi1": 35,
-        "address_pi2": 94,
-        "categories_lcs": 40,
-        "categories_lcs2": 38,
-        "categories_ld": 58,
-        "categories_ll1": 46,
-        "categories_lllcs": 41,
-        "categories_pi1": 38,
-        "categories_pi2": 38,
-        "city_lcs": 19,
-        "city_lcs2": 19,
-        "city_ld": 25,
-        "city_ll1": 19,
-        "city_lllcs": 19,
-        "city_pi1": 19,
-        "city_pi2": 19,
-        "name_cclcs": 4,
-        "name_lcs": 48,
-        "name_lcs2": 39,
-        "name_ld": 49,
-        "name_ll1": 58,
-        "name_lllcs": 44,
-        "name_pi1": 38,
-        "name_pi2": 37,
-        "phone_lcs2": 10,
-        "phone_ld": 10,
-        "phone_pi1": 10,
-        "phone_pi2": 10,
-        "state_lcs": 20,
-        "state_lcs2": 20,
-        "state_ld": 27,
-        "state_ll1": 21,
-        "state_lllcs": 20,
-        "state_pi1": 20,
-        "state_pi2": 20,
-        "url_lcs": 63,
-        "url_lcs2": 47,
-        "url_ld": 105,
-        "url_ll1": 76,
-        "url_lllcs": 59,
-        "url_pi1": 46,
-        "url_pi2": 41,
-        "zip_lcs": 9,
-        "zip_ld": 9,
-        "zip_ll1": 9,
-        "zip_lllcs": 9,
-        "zip_pi2": 9,
-    }
-    for col in cap_di.keys():
+    for col in CAP_DI.keys():
         if col in df.columns:
-            df[col] = np.minimum(df[col], cap_di[col])
+            df[col] = np.minimum(df[col], CAP_DI[col])
 
     # do something to reduce cardinality of ratios
     # round some floats to 2 digits, not 3
@@ -758,13 +770,16 @@ def FE2(df, p1, p2, train, ressources_path=""):
     # number of times col appears in this data
     print('- Count encoding')
     cc_cap = 10000  # cap on counts
-    for col in ["name", "address", "categories", "id", "city", "state", "zip", "phone"]:
+    for col in [
+        "name", "address", "categories", "id", "city", "state",
+        "zip", "phone", "city_group", "state_group"
+    ]:
         p12 = p1[[col]].append(
             p2[[col]], ignore_index=True
         )  # count it in both p1 and p2
         df1 = p12[col].value_counts()
-        p1["cc"] = p1[col].map(df1)
-        p2["cc"] = p2[col].map(df1)
+        p1["cc"] = p1[col].map(df1) * size_ratio
+        p2["cc"] = p2[col].map(df1) * size_ratio
         del p12, df1
         gc.collect()
         # features
@@ -847,6 +862,8 @@ def FE2(df, p1, p2, train, ressources_path=""):
         if idx1.sum() > 0 and idx2.sum() > 0:
             cc1 = count_close(lat[idx2], lon[idx2], lat1[idx1], lon1[idx1])
             cc[idx1, :] = cc1
+
+    cc = cc * size_ratio
     cc = np.minimum(cc, 10000).astype(np.int16)  # scale
     cc = (np.exp(np.round(np.log(cc + 1), 1)) - 0.5).astype(
         np.int16
@@ -879,6 +896,7 @@ def FE2(df, p1, p2, train, ressources_path=""):
                 cat2[idx1],
             )
             cc[idx1, :] = cc1
+    cc = cc * size_ratio
     cc = np.minimum(cc, 10000).astype(np.int16)  # scale
     cc = (np.exp(np.round(np.log(cc + 1), 1)) - 0.5).astype(
         np.int16
@@ -892,7 +910,7 @@ def FE2(df, p1, p2, train, ressources_path=""):
     df["id_cc_cat_5K"] = cc[:, 6]
 
     # feature: count of ids of the same 'category_simpl' within X meters of current.
-    print('- Close countof same category_simpl')
+    print('- Close count of same category_simpl')
     cat = np.array(train["category_simpl"])
     cat1 = np.array(p1["category_simpl"])
     cat2 = np.array(p2["category_simpl"])
@@ -921,6 +939,7 @@ def FE2(df, p1, p2, train, ressources_path=""):
                 cat2[idx1],
             )
             cc[idx1, :] = cc1
+    cc = cc * size_ratio
     cc = np.minimum(cc, 10000).astype(np.int16)  # scale
     cc = (np.exp(np.round(np.log(cc + 1), 1)) - 0.5).astype(
         np.int16
@@ -961,6 +980,45 @@ def FE2(df, p1, p2, train, ressources_path=""):
     df["cat_simpl"] = p1["category_simpl"].astype("int16")
     df["cat_simpl"].iloc[df["same_cat_simpl"] == 0] = 0  # not a match - make it 0
     df["cat_simpl"] = df["cat_simpl"].astype("category")
+
+    # Numbers in names
+    print('- Number in names features')
+    Num_in_p1_names = [sorted(find_num_in_string(text)) for text in p1['name_initial_decode']]
+    Num_in_p2_names = [sorted(find_num_in_string(text)) for text in p2['name_initial_decode']]
+
+    Num_similar = []
+    Nb_of_similar_num = []
+    Ratio_similar_num = []
+    for i, num1 in enumerate(Num_in_p1_names):
+        num2 = Num_in_p2_names[i]
+        if num1 == [] and num2 == []:
+            Num_similar.append(0)
+        elif num1 == [] or num2 == []:
+            Num_similar.append(-1)
+        else:
+            if num1 == num2:
+                Num_similar.append(3)
+            elif all(x in num2 for x in num1) or all(x in num1 for x in num2):
+                Num_similar.append(2)
+            elif any(x in num2 for x in num1) or any(x in num1 for x in num2):
+                Num_similar.append(1)
+            else:
+                Num_similar.append(-2)
+
+        nb, ratio = ratio_of_similar_elements(num1, num2)
+        Nb_of_similar_num.append(nb)
+        Ratio_similar_num.append(ratio)
+
+    # num in names
+    df['num_in_name'] = Num_similar.copy()
+    df['num_in_name'] = df['num_in_name'].astype('int16')
+    df['nb_in_name'] = Nb_of_similar_num.copy()
+    df['nb_in_name'] = df['nb_in_name'].astype('int16')
+    df['ratio_in_name'] = Ratio_similar_num.copy()
+    df['ratio_in_name'] = df['ratio_in_name'].astype('float32')
+
+    del Num_similar, Nb_of_similar_num, Ratio_similar_num
+    gc.collect()
 
     # drop skipped columns
     df.drop(list(F_SKIP0.intersection(df.columns)), axis=1, inplace=True)

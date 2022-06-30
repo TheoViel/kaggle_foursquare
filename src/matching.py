@@ -105,6 +105,8 @@ def get_CV(p1, p2, y, oof_preds, train, df2=None):
     df2["match"] = oof_preds.astype("float32")
 
     df2 = df2.merge(train[["id", "m_true"]], on="id", how="left")  # bring in m_true
+    df2 = df2.sort_values(by=["match"], ascending=False).reset_index(drop=True)
+
     cut2 = 0.8  # hardcode for now
     for cut1 in [0, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65]:
         # select matching pairs
@@ -145,7 +147,7 @@ def get_CV(p1, p2, y, oof_preds, train, df2=None):
             for i in range(matches.shape[0]):
                 i1 = id1[i]
                 i2 = id2[i]
-                pred = preds[i]
+                pred = preds[i] if cut > 0 else 1
                 if (
                     poi_di[i2] != poi_di[i1] and pred > cut2
                 ):  # 2 different groups - put them all in lower one

@@ -4,7 +4,7 @@ from model_zoo.xgb import train_xgb
 from model_zoo.catboost import train_catboost
 from model_zoo.lgbm import train_lgbm
 from sklearn.metrics import roc_auc_score
-# from sklearn.model_selection import KFold
+from sklearn.model_selection import KFold
 
 TRAIN_FCTS = {
     "lgbm": train_lgbm,
@@ -23,23 +23,32 @@ def k_fold(
     ft_imps, models = [], []
     pred_oof = np.zeros(len(df))
 
-    # kf = KFold(n_splits=config.n_folds, shuffle=True, random_state=13)
-    # splits = kf.split(df)
-    # for fold, (train_idx, val_idx) in enumerate(splits):
+    if config.split == "kf":
+        kf = KFold(n_splits=config.n_folds, shuffle=True, random_state=13)
+        splits = kf.split(df)
+    elif config.split == "gkf":
+        splits = [(i, i) for i in range(config.n_folds)]
+    else:
+        raise NotImplementedError()
 
-    for fold in range(config.n_folds):
+    for fold, (train_idx, val_idx) in enumerate(splits):
         if fold in config.selected_folds:
             print(f"\n-------------   Fold {fold + 1} / {config.n_folds}  -------------\n")
 
-            # df_train = df.iloc[train_idx].reset_index(drop=True)
-            # df_val = df.iloc[val_idx].reset_index(drop=True)
+            if config.split == "kf":
+                df_train = df.iloc[train_idx].reset_index(drop=True)
+                df_val = df.iloc[val_idx].reset_index(drop=True)
+            else:
+                df_train = df[
+                    (df["fold_1"] != fold) & (df["fold_2"] != fold)
+                ].reset_index(drop=True)
+                df_val = df[(df["fold_1"] == fold) | (df["fold_2"] == fold)]
 
-            df_train = df[(df["fold_1"] != fold) & (df["fold_2"] != fold)].reset_index(drop=True)
-            df_val = df[(df["fold_1"] == fold) | (df["fold_2"] == fold)]
-
-            val_idx = (
-                df_val.index.values if isinstance(df, pd.DataFrame) else df_val.index.values.get()
-            )
+                val_idx = (
+                    df_val.index.values
+                    if isinstance(df, pd.DataFrame)
+                    else df_val.index.values.get()
+                )
 
             print(f"    -> {len(df_train)} training pairs")
             print(f"    -> {len(df_val)} validation pairs\n")
@@ -55,9 +64,12 @@ def k_fold(
             )
 
             pred_oof[val_idx] = pred_val
-            ft_imp = pd.DataFrame(
-                pd.Series(model.feature_importances_, index=config.features), columns=["importance"]
-            )
+
+            try:
+                ft_imp = model.feature_importance
+            except AttributeError:
+                ft_imp = model.feature_importances_
+            ft_imp = pd.DataFrame(pd.Series(ft_imp, index=config.features), columns=["importance"])
 
             ft_imps.append(ft_imp)
             models.append(model)
@@ -65,10 +77,12 @@ def k_fold(
             if log_folder is None:
                 return pred_oof, models, ft_imp
 
-            try:
+            if config.model == "xgb":
+                model.save_model(log_folder + f"{config.model}_{fold}.json")
+            elif config.model == "lgbm":
+                model.booster_.save_model(log_folder + f"{config.model}_{fold}.txt")
+            else:   # catboost, verif
                 model.save_model(log_folder + f"{config.model}_{fold}.txt")
-            except:
-                 model.booster_.save_model(log_folder + f"{config.model}_{fold}.txt")
 
     y = df[config.target].values if isinstance(df, pd.DataFrame) else df[config.target].get()
     auc = roc_auc_score(y, pred_oof)
