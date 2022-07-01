@@ -9,9 +9,7 @@ def match_pois(df2, threshold=0.5, threshold_small=0.5, threshold_big=0.5):
     id1, id2, preds = id1.flatten(), id2.flatten(), preds.flatten()
 
     id_to_poi = {}  # maps each ID to POI
-    poi_counts = (
-        {}
-    )  # counts number of IDs in each POI - used for threshold determination
+    poi_counts = {}  # counts number of IDs in each POI - used for threshold determination
     poi_to_id = {}
 
     poi = 0
@@ -97,7 +95,7 @@ def merge_pois_advanced(
     poi_counts,
     threshold_merge_avg=0.5,
     threshold_merge_max=0.8,
-    max_size=300
+    max_size=300,
 ):
     id1, id2, preds = np.split(df2.values, [1, 2], axis=1)
     id1, id2, preds = id1.flatten(), id2.flatten(), preds.flatten()
@@ -120,21 +118,21 @@ def merge_pois_advanced(
             merging_pairs.append(to_merge)
 
     df_merge = pd.DataFrame(merging_pairs, columns=["poi1", "poi2", "i1", "i2", "score"])
-    df_merge['poi1_poi2'] = df_merge['poi1'].astype(str) + "_" + df_merge['poi2'].astype(str)
+    df_merge["poi1_poi2"] = df_merge["poi1"].astype(str) + "_" + df_merge["poi2"].astype(str)
 
     to_merge = {}
 
-    for pois, merge in df_merge.groupby('poi1_poi2'):
+    for pois, merge in df_merge.groupby("poi1_poi2"):
 
-        m, m2, i1, i2 = merge[['poi1', 'poi2', 'i1', 'i2']].values[0]
+        m, m2, i1, i2 = merge[["poi1", "poi2", "i1", "i2"]].values[0]
 
-    #     s1 = poi_counts[id_to_poi[i1]]
-    #     s2 = poi_counts[id_to_poi[i2]]
-    #     links_prop = len(merge) / min(s1, s2)
+        #     s1 = poi_counts[id_to_poi[i1]]
+        #     s2 = poi_counts[id_to_poi[i2]]
+        #     links_prop = len(merge) / min(s1, s2)
 
         if (
-            (merge['score'].max() > threshold_merge_max) or
-            (merge['score'].mean() > threshold_merge_avg and len(merge) > 1)
+            (merge["score"].max() > threshold_merge_max)
+            or (merge["score"].mean() > threshold_merge_avg and len(merge) > 1)
             # or (links_prop > 0.25):
         ):
             try:
@@ -159,8 +157,8 @@ def merge_pois_advanced(
 
 
 def iou(preds, truths):
-    p = set(preds.strip().split(' '))
-    t = set(truths.strip().split(' '))
+    p = set(preds.strip().split(" "))
+    t = set(truths.strip().split(" "))
     return len(p & t) / len(p | t)
 
 
@@ -171,9 +169,7 @@ def evaluate(df, m2):
     # fill missing values with self-match
     p1_tr["m2"] = p1_tr["m2"].fillna("missing")
     idx = p1_tr["m2"] == "missing"
-    p1_tr["m2"].loc[idx] = (
-        p1_tr["id"].astype("str").loc[idx]
-    )
+    p1_tr["m2"].loc[idx] = p1_tr["id"].astype("str").loc[idx]
 
     # Compute metric
     x1, x2 = p1_tr["m_true"].to_numpy(), p1_tr["m2"].to_numpy()
@@ -208,11 +204,9 @@ def remove_outliers(df2, id_to_poi, poi_to_id, threshold_out=0.25):
         df_clust = df2.iloc[list(poi_to_pair_idx[clust])]
 
         for id_ in poi_to_id[clust]:
-            scores = df_clust.query(f'id == "{id_}" | id2 == "{id_}"')['match']
+            scores = df_clust.query(f'id == "{id_}" | id2 == "{id_}"')["match"]
 
-            if (
-                scores.mean() < threshold_out
-            ):
+            if scores.mean() < threshold_out:
                 id_to_poi[id_] = current_clust
                 current_clust += 1
 
@@ -221,26 +215,23 @@ def remove_outliers(df2, id_to_poi, poi_to_id, threshold_out=0.25):
     return id_to_poi, poi_to_id
 
 
-def get_improved_CV(df_p, pred_oof, df_gt, thresholds=[0.45, 0.6, 0.6, 0.9, 0], max_size=300):
+def get_improved_CV(df_p, pred_oof, df_gt=None, thresholds=[0.45, 0.6, 0.6, 0.9, 0], max_size=300):
     threshold, threshold_small, threshold_big, threshold_merge_max, threshold_merge_avg = thresholds
     df2 = df_p.copy()
     df2["match"] = np.copy(pred_oof)
 
     try:
-        df2 = df2[['id_1', 'id_2', "match"]]
-        df2.columns = ['id', 'id2', "match"]
+        df2 = df2[["id_1", "id_2", "match"]]
+        df2.columns = ["id", "id2", "match"]
     except KeyError:
-        df2 = df2[['id', 'id2', "match"]]
+        df2 = df2[["id", "id2", "match"]]
 
     # sort by decr prediction
     df2 = df2.sort_values(by=["match"], ascending=False).reset_index(drop=True)
 
     # Build clusters
     id_to_poi, poi_to_id, poi_counts = match_pois(
-        df2,
-        threshold=threshold,
-        threshold_small=threshold_small,
-        threshold_big=threshold_big
+        df2, threshold=threshold, threshold_small=threshold_small, threshold_big=threshold_big
     )
 
     # Merge clusters
@@ -252,7 +243,7 @@ def get_improved_CV(df_p, pred_oof, df_gt, thresholds=[0.45, 0.6, 0.6, 0.9, 0], 
             poi_counts,
             threshold_merge_avg=threshold_merge_avg,
             threshold_merge_max=threshold_merge_max,
-            max_size=max_size
+            max_size=max_size,
         )
     else:
         id_to_poi, poi_to_id, poi_counts = merge_pois_simple(
@@ -262,16 +253,17 @@ def get_improved_CV(df_p, pred_oof, df_gt, thresholds=[0.45, 0.6, 0.6, 0.9, 0], 
             poi_counts,
             threshold=threshold,
             threshold_merge=threshold_merge_max,
-            max_size=max_size
+            max_size=max_size,
         )
 
     # Reformat
     preds = pd.DataFrame.from_dict(id_to_poi, orient="index").reset_index()
-    preds['matches'] = preds[0].map(poi_to_id).apply(lambda x: " ".join(x))
+    preds["matches"] = preds[0].map(poi_to_id).apply(lambda x: " ".join(x))
     preds.columns = ["id", "poi", "m2"]
 
     # Score
-    cv = evaluate(df_gt, preds)
-    print(f"CV {cv:.4f}")
+    if df_gt is not None:
+        cv = evaluate(df_gt, preds)
+        print(f"CV {cv:.4f}")
 
-    return id_to_poi, poi_to_id, poi_counts, preds, cv
+    return id_to_poi, poi_to_id, preds
