@@ -24,6 +24,9 @@ def k_fold_inf(
     else:
         raise NotImplementedError()
 
+    if len(config.cat_features):
+        df[config.cat_features] = df[config.cat_features].astype("category")
+
     for fold, (train_idx, val_idx) in enumerate(splits):
         if fold in config.selected_folds:
             print(f"\n-------------   Fold {fold + 1} / {config.n_folds}  -------------\n")
@@ -61,7 +64,8 @@ def k_fold_inf(
             print(f"- AUC = {roc_auc_score(df_val[config.target], pred_val):.4f}")
             pred_oof[val_idx] += pred_val
 
-    pred_oof = pred_oof / (1 + (df["fold_1"] != df["fold_2"]))
+    if config.split == "gkf":
+        pred_oof = pred_oof / (1 + (df["fold_1"] != df["fold_2"]))
 
     print(f"\n -> CV AUC = {roc_auc_score(df[config.target], pred_oof) :.4f}\n")
 

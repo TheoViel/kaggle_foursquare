@@ -63,7 +63,7 @@ def k_fold(
                 cat_features=config.cat_features,
             )
 
-            pred_oof[val_idx] = pred_val
+            pred_oof[val_idx] += pred_val
 
             try:
                 ft_imp = model.feature_importance
@@ -83,6 +83,9 @@ def k_fold(
                 model.booster_.save_model(log_folder + f"{config.model}_{fold}.txt")
             else:   # catboost, verif
                 model.save_model(log_folder + f"{config.model}_{fold}.txt")
+
+    if config.split == "gkf":
+        pred_oof = pred_oof / (1 + (df["fold_1"] != df["fold_2"]))
 
     y = df[config.target].values if isinstance(df, pd.DataFrame) else df[config.target].get()
     auc = roc_auc_score(y, pred_oof)
