@@ -107,9 +107,9 @@ def tf_idf_similarity(pairs, matrix):
     sims = matrix[i1s].multiply(matrix[i2s]).sum(1)
 
     try:
-        return sims.get()
+        return np.array(sims.get()).flatten()
     except AttributeError:
-        return sims
+        return np.array(sims).flatten()
 
 
 # Coordinates Distances
