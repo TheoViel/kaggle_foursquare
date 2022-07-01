@@ -1,3 +1,5 @@
+# flake8: noqa
+
 import gc
 import time
 import random

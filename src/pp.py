@@ -60,7 +60,7 @@ def get_poi_to_id(id_to_poi):
 
 
 def merge_pois_simple(
-    df2, id_to_poi, poi_to_id, poi_counts, threshold=0.5, threshold_merge=0.8
+    df2, id_to_poi, poi_to_id, poi_counts, threshold=0.5, threshold_merge=0.8, max_size=300
 ):
     matches = df2[df2["match"] > threshold].reset_index(drop=True)
 
@@ -73,7 +73,7 @@ def merge_pois_simple(
             if (
                 id_to_poi[i2] != id_to_poi[i1]
                 and pred > threshold_merge
-                and poi_counts[id_to_poi[i1]] + poi_counts[id_to_poi[i2]] <= 300
+                and poi_counts[id_to_poi[i1]] + poi_counts[id_to_poi[i2]] <= max_size
             ):
                 m = min(id_to_poi[i2], id_to_poi[i1])
                 m2 = max(id_to_poi[i2], id_to_poi[i1])
@@ -86,6 +86,74 @@ def merge_pois_simple(
 
                 poi_to_id[m] = poi_to_id[m] + poi_to_id[m2]
                 poi_to_id[m2] = []
+
+    return id_to_poi, poi_to_id, poi_counts
+
+
+def merge_pois_advanced(
+    df2,
+    id_to_poi,
+    poi_to_id,
+    poi_counts,
+    threshold_merge_avg=0.5,
+    threshold_merge_max=0.8,
+    max_size=300
+):
+    id1, id2, preds = np.split(df2.values, [1, 2], axis=1)
+    id1, id2, preds = id1.flatten(), id2.flatten(), preds.flatten()
+    merging_pairs = []
+
+    for i, (i1, i2, pred) in enumerate(zip(id1, id2, preds)):
+        if i1 in id_to_poi and i2 in id_to_poi:
+            poi1 = id_to_poi[i1]
+            poi2 = id_to_poi[i2]
+
+            if id_to_poi[i2] == id_to_poi[i1]:
+                continue
+
+            if poi_counts[poi1] + poi_counts[poi2] > 300:
+                continue  # Too big, skip
+
+            m = min(poi1, poi2)
+            m2 = max(poi2, poi1)
+            to_merge = [m, m2, i1, i2, pred]
+            merging_pairs.append(to_merge)
+
+    df_merge = pd.DataFrame(merging_pairs, columns=["poi1", "poi2", "i1", "i2", "score"])
+    df_merge['poi1_poi2'] = df_merge['poi1'].astype(str) + "_" + df_merge['poi2'].astype(str)
+
+    to_merge = {}
+
+    for pois, merge in df_merge.groupby('poi1_poi2'):
+
+        m, m2, i1, i2 = merge[['poi1', 'poi2', 'i1', 'i2']].values[0]
+
+    #     s1 = poi_counts[id_to_poi[i1]]
+    #     s2 = poi_counts[id_to_poi[i2]]
+    #     links_prop = len(merge) / min(s1, s2)
+
+        if (
+            (merge['score'].max() > threshold_merge_max) or
+            (merge['score'].mean() > threshold_merge_avg and len(merge) > 1)
+            # or (links_prop > 0.25):
+        ):
+            try:
+                to_merge[m2] = to_merge[m]
+            except KeyError:
+                to_merge[m2] = m
+
+    for m2, m in to_merge.items():
+        if poi_counts[m] + poi_counts[m2] > max_size:
+            continue
+
+        poi_counts[m] = poi_counts[m] + poi_counts[m2]
+        poi_counts[m2] = 0
+
+        for poi in poi_to_id[m2]:
+            id_to_poi[poi] = m
+
+        poi_to_id[m] = poi_to_id[m] + poi_to_id[m2]
+        poi_to_id[m2] = []
 
     return id_to_poi, poi_to_id, poi_counts
 
@@ -115,8 +183,46 @@ def evaluate(df, m2):
     return cv
 
 
-def get_improved_CV(df_p, pred_oof, df_gt, thresholds=[0.45, 0.6, 0.6, 0.9]):
-    threshold, threshold_small, threshold_big, threshold_merge = thresholds
+def remove_outliers(df2, id_to_poi, poi_to_id, threshold_out=0.25):
+    id1, id2, preds = np.split(df2.values, [1, 2], axis=1)
+    id1, id2, preds = id1.flatten(), id2.flatten(), preds.flatten()
+
+    poi_to_pair_idx = {}
+
+    for i, (i1, i2, pred) in enumerate(zip(id1, id2, preds)):
+        poi1 = id_to_poi.get(i1, -1)
+        poi2 = id_to_poi.get(i2, -1)
+        if poi1 > -1 and poi2 > -1 and poi1 == poi2:
+            try:
+                poi_to_pair_idx[poi1].add(i)
+            except Exception:
+                poi_to_pair_idx[poi1] = set([i])
+
+    # filter out
+    current_clust = np.max(list(id_to_poi.values())) + 1
+
+    for clust in poi_to_id:
+        if len(poi_to_id[clust]) < 3:
+            continue
+
+        df_clust = df2.iloc[list(poi_to_pair_idx[clust])]
+
+        for id_ in poi_to_id[clust]:
+            scores = df_clust.query(f'id == "{id_}" | id2 == "{id_}"')['match']
+
+            if (
+                scores.mean() < threshold_out
+            ):
+                id_to_poi[id_] = current_clust
+                current_clust += 1
+
+    poi_to_id = get_poi_to_id(id_to_poi)
+
+    return id_to_poi, poi_to_id
+
+
+def get_improved_CV(df_p, pred_oof, df_gt, thresholds=[0.45, 0.6, 0.6, 0.9, 0], max_size=300):
+    threshold, threshold_small, threshold_big, threshold_merge_max, threshold_merge_avg = thresholds
     df2 = df_p.copy()
     df2["match"] = np.copy(pred_oof)
 
@@ -138,14 +244,26 @@ def get_improved_CV(df_p, pred_oof, df_gt, thresholds=[0.45, 0.6, 0.6, 0.9]):
     )
 
     # Merge clusters
-    id_to_poi, poi_to_id, poi_counts = merge_pois_simple(
-        df2,
-        id_to_poi,
-        poi_to_id,
-        poi_counts,
-        threshold=threshold,
-        threshold_merge=threshold_merge,
-    )
+    if threshold_merge_avg > 0:
+        id_to_poi, poi_to_id, poi_counts = merge_pois_advanced(
+            df2,
+            id_to_poi,
+            poi_to_id,
+            poi_counts,
+            threshold_merge_avg=threshold_merge_avg,
+            threshold_merge_max=threshold_merge_max,
+            max_size=max_size
+        )
+    else:
+        id_to_poi, poi_to_id, poi_counts = merge_pois_simple(
+            df2,
+            id_to_poi,
+            poi_to_id,
+            poi_counts,
+            threshold=threshold,
+            threshold_merge=threshold_merge_max,
+            max_size=max_size
+        )
 
     # Reformat
     preds = pd.DataFrame.from_dict(id_to_poi, orient="index").reset_index()
@@ -156,4 +274,4 @@ def get_improved_CV(df_p, pred_oof, df_gt, thresholds=[0.45, 0.6, 0.6, 0.9]):
     cv = evaluate(df_gt, preds)
     print(f"CV {cv:.4f}")
 
-    return cv
+    return id_to_poi, poi_to_id, poi_counts, preds, cv

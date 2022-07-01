@@ -40,6 +40,9 @@ def k_fold_inf(
                 )
             print(f"- Scoring {len(df_val)} pairs\n")
 
+            if not len(df_val):
+                continue
+
             if config.model == "lgbm":
                 model = ForestInference.load(log_folder + f"lgbm_{fold}.txt", model_type="lightgbm")
                 pred_val = model.predict(df_val[config.features]).flatten()

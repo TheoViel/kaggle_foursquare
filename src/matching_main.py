@@ -1668,12 +1668,11 @@ get_CV(
 # In[74]:
 
 
-if not DEBUG:
-    if IS_TEST:
-        p1.to_csv(OUT_PATH + "p1_yv_test.csv", index=False)
-        p2.to_csv(OUT_PATH + "p2_yv_test.csv", index=False)
-    else:
-        p1.to_csv(OUT_PATH + "p1_yv_train.csv", index=False)
-        p2.to_csv(OUT_PATH + "p2_yv_train.csv", index=False)
+if IS_TEST:
+    p1.to_csv(OUT_PATH + "p1_yv_test.csv", index=False)
+    p2.to_csv(OUT_PATH + "p2_yv_test.csv", index=False)
+else:
+    p1.to_csv(OUT_PATH + "p1_yv_train.csv", index=False)
+    p2.to_csv(OUT_PATH + "p2_yv_train.csv", index=False)
 
 print("Done !")

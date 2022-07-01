@@ -60,9 +60,8 @@ def train_xgb(
 
     model = XGBClassifier(
         **params,
-        n_estimators=10000,
+        n_estimators=20000,
         objective="binary:logistic",
-        learning_rate=0.05,
         eval_metric="auc",
         tree_method="gpu_hist",
         predictor="gpu_predictor",

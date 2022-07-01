@@ -37,7 +37,6 @@ def train_lgbm(
             **params,
             n_estimators=10000,
             objective="binary",
-            learning_rate=0.05,
             device="gpu",
             random_state=42 + i,
             snapshot_freq=100,

@@ -7,7 +7,7 @@ import pandas as pd
 from tqdm.auto import tqdm
 from unidecode import unidecode
 
-from params import DATA_PATH, OUT_PATH, RESSOURCES_PATH, IS_TEST
+from params import DATA_PATH, OUT_PATH, RESSOURCES_PATH, IS_TEST, DEBUG
 from ressources import (
     NAME_DI,
     CITY_DI,
@@ -59,6 +59,9 @@ if IS_TEST:
 else:
     train = pd.read_csv(DATA_PATH + "train.csv")
 
+
+if DEBUG:
+    train = train.head(10000)
 
 # ## Cleaning & processing
 
