@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 from tqdm.auto import tqdm
 
-from params import DEBUG, OUT_PATH, IS_TEST
+from params import OUT_PATH, IS_TEST
 from ressources import COUNTRIES
 from matching import (
     load_cleaned_data,
@@ -43,8 +43,8 @@ else:
 # In[6]:
 
 
-if DEBUG:
-    train = train.head(10000)
+# if DEBUG:
+#     train = train.head(10000)
 
 
 # ### Target

@@ -1,5 +1,20 @@
 import numpy as np
 
+
+def convert_to_dtypes(df, dtypes):
+    for col in df.columns:
+        t = dtypes[col]
+        if df.dtypes[col].__str__() == "category":
+            df[col] = np.clip(df[col], np.iinfo(t).min, np.iinfo(t).max).astype(t)
+        elif t != df.dtypes[col]:
+            if "float" in t.__str__():
+                df[col] = np.clip(df[col], np.finfo(t).min, np.finfo(t).max).astype(t)
+            else:
+                df[col] = np.clip(df[col], np.iinfo(t).min, np.iinfo(t).max).astype(t)
+
+    return df
+
+
 DTYPES_1 = {
     "id_1": np.dtype("O"),
     "id_2": np.dtype("O"),
