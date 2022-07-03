@@ -61,6 +61,7 @@ def k_fold(
                 config.target,
                 params=config.params,
                 cat_features=config.cat_features,
+                use_es=config.use_es,
             )
 
             pred_oof[val_idx] += pred_val

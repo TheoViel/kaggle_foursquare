@@ -55,12 +55,13 @@ def train_xgb(
     target="match",
     params=None,
     cat_features=[],
+    use_es=True,
     i=0,
 ):
 
     model = XGBClassifier(
         **params,
-        n_estimators=20000,
+        n_estimators=4000,
         objective="binary:logistic",
         eval_metric="auc",
         tree_method="gpu_hist",
@@ -84,8 +85,7 @@ def train_xgb(
         df_train[target],
         eval_set=[(df_val[features], df_val[target])],
         verbose=100,
-        # early_stopping_rounds=100,  # None
-        callbacks=[es],
+        callbacks=[es] if use_es else [],
     )
 
     pred = model.predict_proba(df_val[features])[:, 1]

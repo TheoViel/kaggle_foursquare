@@ -27,6 +27,7 @@ def train_lgbm(
     target="match",
     params=None,
     cat_features=[],
+    use_es=False,
     i=0,
 ):
     auc = 0
@@ -35,12 +36,16 @@ def train_lgbm(
 
         model = LGBMClassifier(
             **params,
-            n_estimators=10000,
+            n_estimators=8000,
             objective="binary",
             device="gpu",
             random_state=42 + i,
             snapshot_freq=100,
         )
+
+        callbacks = [log_evaluation(100), CheckpointCallback(100)]
+        if use_es:
+            callbacks += [early_stopping(100)]
 
         try:
             model.fit(
@@ -48,7 +53,7 @@ def train_lgbm(
                 df_train[target],
                 eval_set=[(df_val[features], df_val[target])],
                 eval_metric="auc",
-                callbacks=[early_stopping(100), log_evaluation(100), CheckpointCallback(100)],
+                callbacks=callbacks,
                 categorical_feature=cat_features,
             )
             pred = model.predict_proba(df_val[features])[:, 1]
