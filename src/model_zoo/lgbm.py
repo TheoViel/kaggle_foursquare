@@ -60,7 +60,7 @@ def train_lgbm(
             auc = 1
         except LightGBMError:
             print('LightGBMError ! Retrieving fitted model : model_tmp.txt')
-            model = Booster(model_file='model_tmp.txt')
+            model = Booster(model_file=OUT_PATH + 'model_tmp.txt')
             pred = model.predict(df_val[features]).ravel()
             auc = roc_auc_score(df_val[target], pred)
             print(f'Fitted model scores {auc:.5f}')

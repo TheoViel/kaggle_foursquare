@@ -1,13 +1,16 @@
+import gc
 import numpy as np
 import pandas as pd
 
 from fe import FE2, FE1
 from fe_theo import feature_engineering_theo, feature_engineering_theo_2
+from dtypes import DTYPES_1, DTYPES_2, convert_to_dtypes
 
 
-def feature_engineering_1(p1, p2, train, ressources_path="", size_ratio=1):
+def feature_engineering_1(p1, p2, size_ratio=1):
     # Vincent & Youri
     df = FE1(p1, p2)
+    df = convert_to_dtypes(df, DTYPES_1)
 
     df.insert(0, "id_1", p1["id"].values)
     df.insert(1, "id_2", p2["id"].values)
@@ -31,7 +34,14 @@ def feature_engineering_1(p1, p2, train, ressources_path="", size_ratio=1):
     pairs = pd.concat([p1[cols], p2[cols]], axis=1)
     pairs.columns = [c + "_1" for c in cols] + [c + "_2" for c in cols]
 
-    df_theo, fts_theo = feature_engineering_theo(train.copy(), pairs)
+    del p1, p2
+    gc.collect()
+
+    df_theo, _ = feature_engineering_theo(pairs)
+    df_theo = convert_to_dtypes(df_theo, DTYPES_1)
+
+    del pairs
+    gc.collect()
 
     # Merge
     df_merged = df.merge(df_theo, on=["id_1", "id_2"])
@@ -53,21 +63,29 @@ def feature_engineering_2(df_p, train, ressources_path="", size_ratio=1):
     p2 = df_p[["id_2"]].copy()
     p2.columns = ["id"]
 
-    df = FE2(df_p.copy(), p1, p2, train, ressources_path, size_ratio=size_ratio)
+    df = FE2(df_p, p1, p2, train, ressources_path, size_ratio=size_ratio)
+    df = convert_to_dtypes(df, DTYPES_2)
 
     # Théo
-    cols = ["id", "name", "address", "country", "url", "phone", "city", "state", "zip", "idx"]
+    cols = ["id", "name", "address", "city", "state", "zip", "url", "phone", "idx"]
 
     for col in cols[1:]:
         train.loc[train[col] == "", col] = np.nan
 
-    p1 = p1[["id"]].merge(train[cols], on="id", how="left")
-    p2 = p2[["id"]].merge(train[cols], on="id", how="left")
-
-    pairs = pd.concat([p1[cols], p2[cols]], axis=1)
+    pairs = pd.concat([
+        p1[["id"]].merge(train[cols], on="id", how="left")[cols],
+        p2[["id"]].merge(train[cols], on="id", how="left")[cols]
+    ], axis=1)
     pairs.columns = [c + "_1" for c in cols] + [c + "_2" for c in cols]
 
-    df_theo, _ = feature_engineering_theo_2(train.copy(), pairs.copy(), cuda=False)
+    del p1, p2
+    gc.collect()
+
+    df_theo, _ = feature_engineering_theo_2(train, pairs, cuda=False)
+    df_theo = convert_to_dtypes(df_theo, DTYPES_2)
+
+    del pairs
+    gc.collect()
 
     # Merge
     df_merged = df.merge(df_theo, on=["id_1", "id_2"])

@@ -176,25 +176,8 @@ def compute_nan_features(df, cols):
 
 # Level 1
 
-def feature_engineering_theo(df, df_p):
+def feature_engineering_theo(df_p):
     features = []
-
-    for col in ["name", "address", "url"]:
-        df.loc[df[col] == "", col] = np.nan
-
-    #     print('- Computing nan features')
-    #     features += compute_nan_features(df_p, NAN_COLS)
-
-    #     for name, folder in NN_FT_FOLDERS:
-    #         print(f'- Adding features using model {name}')
-    #         nn_preds = np.load(OUT_PATH + f"fts_{name}.npy").astype(np.float16)
-    #         nn_preds = torch.from_numpy(nn_preds).cuda()
-
-    #         features += compute_nn_distances(df_p, nn_preds, suffix="_" + name)
-
-    #         del nn_preds
-    #         gc.collect()
-    #         torch.cuda.empty_cache()
 
     print("- Computing position distances")
     DIST_FCTS = [angular_distance, angular_distance_l2]
