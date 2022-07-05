@@ -3,7 +3,10 @@ import numpy as np
 
 def convert_to_dtypes(df, dtypes):
     for col in df.columns:
-        t = dtypes[col]
+        try:
+            t = dtypes[col]
+        except KeyError():
+            continue
         if df.dtypes[col].__str__() == "category":
             df[col] = np.clip(df[col].astype(int), np.iinfo(t).min, np.iinfo(t).max).astype(t)
         elif t != df.dtypes[col]:

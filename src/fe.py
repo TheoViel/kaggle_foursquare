@@ -601,15 +601,15 @@ def FE2(df, p1, p2, train, ressources_path="", size_ratio=1):
         # dsm = difflib.SequenceMatcher (float); not symmetrical, do apply twice!
         for i in range(df.shape[0]):
             fi[i] = difflib.SequenceMatcher(None, x1[i], x2[i]).ratio()
-        for i in range(df.shape[0]):
-            fi2[i] = difflib.SequenceMatcher(None, x2[i], x1[i]).ratio()
+        # for i in range(df.shape[0]):
+        #     fi2[i] = difflib.SequenceMatcher(None, x2[i], x1[i]).ratio()
 
         # fi = dfp[[col + "_1", col + "_2"]].parallel_apply(
         #     lambda x: difflib.SequenceMatcher(None, x[0], x[1]).ratio(), axis=1
         # )
 
         df[col + "_dsm1"] = np.round(fi, num_digits).astype(np.float32)
-        df[col + "_dsm2"] = np.round(fi2, num_digits).astype(np.float32)
+        # df[col + "_dsm2"] = np.round(fi2, num_digits).astype(np.float32)
 
         # ll1 - min length of this column
         ll1 = np.maximum(1, np.minimum(p1[col].apply(len), p2[col].apply(len))).astype(
