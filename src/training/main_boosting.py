@@ -67,12 +67,17 @@ def k_fold(
             pred_oof[val_idx] += pred_val
 
             try:
-                ft_imp = model.feature_importance
-            except AttributeError:
-                ft_imp = model.feature_importances_
-            ft_imp = pd.DataFrame(pd.Series(ft_imp, index=config.features), columns=["importance"])
+                try:
+                    ft_imp = model.feature_importance
+                except AttributeError:
+                    ft_imp = model.feature_importances_
+                ft_imp = pd.DataFrame(
+                    pd.Series(ft_imp, index=config.features), columns=["importance"]
+                )
 
-            ft_imps.append(ft_imp)
+                ft_imps.append(ft_imp)
+            except Exception:
+                pass
             models.append(model)
 
             if log_folder is None:
@@ -81,7 +86,10 @@ def k_fold(
             if config.model == "xgb":
                 model.save_model(log_folder + f"{config.model}_{fold}.json")
             elif config.model == "lgbm":
-                model.booster_.save_model(log_folder + f"{config.model}_{fold}.txt")
+                try:
+                    model.booster_.save_model(log_folder + f"{config.model}_{fold}.txt")
+                except Exception:
+                    model.save_model(log_folder + f"{config.model}_{fold}.txt")
             else:   # catboost, verif
                 model.save_model(log_folder + f"{config.model}_{fold}.txt")
 

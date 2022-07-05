@@ -527,44 +527,44 @@ def FE2(df, p1, p2, train, ressources_path="", size_ratio=1):
 
         name = col + "_cclcs"  # cclcs = count of common substrings of length X+
         if name not in f_skip1 and name not in F_SKIP0:  # skip to save time
-            # for i in range(df.shape[0]):
-            #     ii[i] = cc_lcs(x1[i], x2[i], 4)
-            # df[name] = ii
-            df[name] = dfp[[col + "_1", col + "_2"]].parallel_apply(
-                lambda x: cc_lcs(x[0], x[1], 4), axis=1
-            )
+            for i in range(df.shape[0]):
+                ii[i] = cc_lcs(x1[i], x2[i], 4)
+            df[name] = ii
+            # df[name] = dfp[[col + "_1", col + "_2"]].parallel_apply(
+            #     lambda x: cc_lcs(x[0], x[1], 4), axis=1
+            # )
 
         name = col + "_lllcs"  # lllcs = total length of common substrings of length X+
         if name not in f_skip1:  # skip to save time
             min_len = 1 if col == "nameC" else 5
 
-            # for i in range(df.shape[0]):
-            #     ii[i] = ll_lcs(x1[i], x2[i], min_len)
-            # df[name] = ii
+            for i in range(df.shape[0]):
+                ii[i] = ll_lcs(x1[i], x2[i], min_len)
+            df[name] = ii
 
-            df[name] = dfp[[col + "_1", col + "_2"]].parallel_apply(
-                lambda x: ll_lcs(x[0], x[1], min_len), axis=1
-            )
+            # df[name] = dfp[[col + "_1", col + "_2"]].parallel_apply(
+            #     lambda x: ll_lcs(x[0], x[1], min_len), axis=1
+            # )
 
         name = col + "_lcs2"  # lcs2 = longest common substring
         if name not in f_skip1:  # skip to save time
-            # for i in range(df.shape[0]):
-            #     ii[i] = lcs2(x1[i], x2[i])
-            # df[name] = ii
+            for i in range(df.shape[0]):
+                ii[i] = lcs2(x1[i], x2[i])
+            df[name] = ii
 
-            df[name] = dfp[[col + "_1", col + "_2"]].parallel_apply(
-                lambda x: lcs2(x[0], x[1]), axis=1
-            )
+            # df[name] = dfp[[col + "_1", col + "_2"]].parallel_apply(
+            #     lambda x: lcs2(x[0], x[1]), axis=1
+            # )
 
         name = col + "_lcs"  # lcs = longest common subsequence
         if name not in f_skip1:  # skip to save time
-            # for i in range(df.shape[0]):
-            #     ii[i] = lcs(x1[i], x2[i])
-            # df[name] = ii
+            for i in range(df.shape[0]):
+                ii[i] = lcs(x1[i], x2[i])
+            df[name] = ii
 
-            df[name] = dfp[[col + "_1", col + "_2"]].parallel_apply(
-                lambda x: lcs(x[0], x[1]), axis=1
-            )
+            # df[name] = dfp[[col + "_1", col + "_2"]].parallel_apply(
+            #     lambda x: lcs(x[0], x[1]), axis=1
+            # )
 
         name = col + "_pi1"  # pi1 = partial intersection, start of string
         if name not in f_skip1:  # skip to save time
@@ -577,13 +577,13 @@ def FE2(df, p1, p2, train, ressources_path="", size_ratio=1):
 
         name = col + "_pi2"  # pi2 = partial intersection, end of string
         if name not in f_skip1:  # skip to save time
-            # for i in range(df.shape[0]):
-            #     ii[i] = pi2(x1[i], x2[i])
-            # df[name] = ii
+            for i in range(df.shape[0]):
+                ii[i] = pi2(x1[i], x2[i])
+            df[name] = ii
 
-            df[name] = dfp[[col + "_1", col + "_2"]].parallel_apply(
-                lambda x: pi2(x[0], x[1]), axis=1
-            )
+            # df[name] = dfp[[col + "_1", col + "_2"]].parallel_apply(
+            #     lambda x: pi2(x[0], x[1]), axis=1
+            # )
 
         name = col + "_ld"  # ld = Levenshtein.distance
         if name not in f_skip1:  # skip to save time
@@ -599,16 +599,17 @@ def FE2(df, p1, p2, train, ressources_path="", size_ratio=1):
             df[name] = np.round(fi, num_digits).astype(np.float32)  # round
 
         # dsm = difflib.SequenceMatcher (float); not symmetrical, do apply twice!
-        # for i in range(df.shape[0]):
-        #     fi[i] = difflib.SequenceMatcher(None, x1[i], x2[i]).ratio()
-        # for i in range(df.shape[0]):
-        #     fi2[i] = difflib.SequenceMatcher(None, x2[i], x1[i]).ratio()
+        for i in range(df.shape[0]):
+            fi[i] = difflib.SequenceMatcher(None, x1[i], x2[i]).ratio()
+        for i in range(df.shape[0]):
+            fi2[i] = difflib.SequenceMatcher(None, x2[i], x1[i]).ratio()
 
-        fi = dfp[[col + "_1", col + "_2"]].parallel_apply(
-            lambda x: difflib.SequenceMatcher(None, x[0], x[1]).ratio(), axis=1
-        )
+        # fi = dfp[[col + "_1", col + "_2"]].parallel_apply(
+        #     lambda x: difflib.SequenceMatcher(None, x[0], x[1]).ratio(), axis=1
+        # )
 
         df[col + "_dsm1"] = np.round(fi, num_digits).astype(np.float32)
+        df[col + "_dsm2"] = np.round(fi2, num_digits).astype(np.float32)
 
         # ll1 - min length of this column
         ll1 = np.maximum(1, np.minimum(p1[col].apply(len), p2[col].apply(len))).astype(

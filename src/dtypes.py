@@ -12,7 +12,7 @@ def convert_to_dtypes(df, dtypes):
             else:
                 df[col] = np.clip(df[col], np.iinfo(t).min, np.iinfo(t).max).astype(t)
 
-    return df
+    # return df
 
 
 DTYPES_1 = {

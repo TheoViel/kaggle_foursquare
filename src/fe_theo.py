@@ -51,7 +51,7 @@ def compute_string_distances(df, string_columns, verbose=0):
             if verbose:
                 print(f"- Column : {col}  -  Function : {name}")
 
-            df[col + "_" + name] = df[[col + "_1", col + "_2"]].parallel_apply(
+            df[col + "_" + name] = df[[col + "_1", col + "_2"]].apply(
                 lambda x: compute_string_distance(fct, x[0], x[1]), axis=1
             )
             features.append(col + "_" + name)
@@ -77,7 +77,7 @@ def compute_string_distances_2(df, string_columns, verbose=0):
             if verbose:
                 print(f"- Column : {col}  -  Function : {name}")
 
-            df[col + "_" + name] = df[[col + "_1", col + "_2"]].parallel_apply(
+            df[col + "_" + name] = df[[col + "_1", col + "_2"]].apply(
                 lambda x: compute_string_distance(fct, x[0], x[1]), axis=1
             )
             features.append(col + "_" + name)
@@ -197,7 +197,7 @@ def feature_engineering_theo(df_p):
         df_p[f"same_{col}"] = (
             df_p[[f"{col}_1", f"{col}_2"]]
             .fillna("")
-            .parallel_apply(lambda x: fct(x[0], x[1]), axis=1)
+            .apply(lambda x: fct(x[0], x[1]), axis=1)
             .astype(float)
         )
 
