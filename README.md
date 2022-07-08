@@ -1,6 +1,6 @@
 # Foursquare Location Matching
 
-#### Authors : Youri Matiouine, Vincent Schuler, Théo Viel
+#### Authors : Youri Matiounine, Vincent Schuler, Théo Viel
 
 4th place solution for the [Foursquare Location Matching competition](https://www.kaggle.com/c/foursquare-location-matching)
 
