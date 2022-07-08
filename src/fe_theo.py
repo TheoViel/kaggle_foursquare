@@ -206,8 +206,8 @@ def feature_engineering_theo(df_p):
     STRING_DIST_COLS = ["name", "address", "url"]
     features += compute_string_distances(df_p, STRING_DIST_COLS, verbose=1)
 
-    to_keep = ["id_1", "id_2"] + features
-    df_p.drop([c for c in df_p.columns if c not in to_keep], axis=1, inplace=True)
+    # to_keep = ["id_1", "id_2"] + features
+    # df_p.drop([c for c in df_p.columns if c not in to_keep], axis=1, inplace=True)
 
     return df_p, features
 

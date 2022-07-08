@@ -5,7 +5,7 @@ DATA_PATH = "../data/"
 RESSOURCES_PATH = "../data/ressources/"
 
 IS_TEST = False
-DEBUG = False
+DEBUG = True
 N_ROWS = 600000
 
 LOG_PATH = "../logs/"
